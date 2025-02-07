@@ -9,61 +9,107 @@ from django.views.decorators.csrf import csrf_exempt
 from django.core.paginator import Paginator
 from .models import Signup, Planner, Tourlist, PlannerDetail, Board, Comment
 from django.core.mail import send_mail  # 실제 메일 전송 시 사용 (설정 필요)
+from django.contrib.auth.hashers import make_password  # 해시 처리를 위한 함수
+from django.contrib.auth.hashers import check_password
+from .email_utils import send_email_dynamic
+
 
 def main_page(request):
-    """
-    메인 페이지: 캐러셀, 배너, 검색 등 기능을 포함합니다.
-    """
-    return render(request, 'planner/main_page.html')
+    regions = [
+        {"name": "서울", "img": "seoul.jpg"},
+        {"name": "부산", "img": "busan.jpg"},
+        {"name": "제주도", "img": "jeju.jpg"},
+        {"name": "강릉", "img": "gangneung.jpg"},
+        {"name": "경주", "img": "gyeongju.jpg"},
+        {"name": "영월", "img": "yeongwol.jpg"},
+        {"name": "전주", "img": "jeonju.jpg"},
+        {"name": "여수", "img": "yeosu.jpg"},
+        {"name": "인천", "img": "incheon.jpg"},
+        {"name": "속초", "img": "sokcho.jpg"},
+        {"name": "대구", "img": "daegu.jpg"},
+        {"name": "춘천", "img": "chuncheon.jpg"}
+    ]
+    context = {
+        "regions": regions,
+    }
+    return render(request, "planner/main_page.html", context)
 
+
+@csrf_exempt
 def signup_view(request):
     if request.method == 'POST':
         email = request.POST.get('email')
         password = request.POST.get('password')
+        password_confirm = request.POST.get('password_confirm')
         name = request.POST.get('name')
         birth = request.POST.get('birth')
         addr = request.POST.get('addr')
         phone_num = request.POST.get('phone_num')
 
-        # 이메일 유효성 검사 (간단한 정규 표현식)
-        email_pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
-        if not re.match(email_pattern, email):
+        # 서버 측 검증
+
+        # 이메일 검증
+        var_email_pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
+        if not re.match(var_email_pattern, email):
             return JsonResponse({'status': 'error', 'message': '유효하지 않은 이메일 형식입니다.'}, status=400)
 
-        # 비밀번호 유효성 검사 (예: 최소 6자 이상)
-        if len(password) < 6:
-            return JsonResponse({'status': 'error', 'message': '비밀번호는 6자 이상이어야 합니다.'}, status=400)
+        # 비밀번호 검증: 8~16자, 영문 대소문자, 숫자, 특수문자 포함
+        var_password_pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};\'":\\|,.<>\/?]).{8,16}$'
+        if not re.match(var_password_pattern, password):
+            return JsonResponse({'status': 'error', 'message': '비밀번호는 8~16자 영문 대소문자, 숫자, 특수문자를 포함해야 합니다.'}, status=400)
 
-        # 이미 가입된 이메일인지 확인
-        if Signup.objects.filter(email=email).exists():
-            return JsonResponse({'status': 'error', 'message': '이미 가입된 이메일입니다.'}, status=400)
+        if password != password_confirm:
+            return JsonResponse({'status': 'error', 'message': '비밀번호와 비밀번호 재확인이 일치하지 않습니다.'}, status=400)
 
-        # 회원 생성 (birth는 값이 없으면 None 처리)
-        Signup.objects.create(
-            email=email,
-            password=password,
-            name=name,
-            birth=birth if birth else None,
-            addr=addr,
-            phone_num=phone_num
-        )
-
-        return JsonResponse({'status': 'success', 'message': '회원가입 성공'})
+        # 중복 가입 검사:
+        # 만약 해당 이메일로 가입한 사용자가 있다면,
+        # - is_active가 True이면 이미 가입된 계정이므로 에러를 반환하고,
+        # - is_active가 False이면 해당 레코드를 업데이트하여 재가입(재활성화) 처리
+        try:
+            existing_user = Signup.objects.get(email=email)
+            if existing_user.is_active:
+                return JsonResponse({'status': 'error', 'message': '이미 가입된 이메일입니다.'}, status=400)
+            else:
+                # 탈퇴된 계정이면 업데이트하여 재가입 처리
+                existing_user.password = make_password(password)
+                existing_user.name = name
+                existing_user.birth = birth if birth else None
+                existing_user.addr = addr
+                existing_user.phone_num = phone_num
+                existing_user.is_active = True
+                existing_user.save()
+                return JsonResponse({'status': 'success', 'message': '회원가입 성공'})
+        except Signup.DoesNotExist:
+            # 존재하지 않는 경우에는 새로 생성
+            Signup.objects.create(
+                email=email,
+                password=make_password(password),
+                name=name,
+                birth=birth if birth else None,
+                addr=addr,
+                phone_num=phone_num,
+                is_active=True
+            )
+            return JsonResponse({'status': 'success', 'message': '회원가입 성공'})
     else:
-        # GET 요청 시 회원가입 페이지 렌더링
         return render(request, 'planner/signup.html')
 
-@csrf_exempt  # 개발 단계에서 CSRF 보호를 임시 비활성화 (실제 배포시에는 CSRF 보호를 활성화해야 합니다)
+@csrf_exempt
 def login_view(request):
     if request.method == "POST":
         email = request.POST.get("email")
         password = request.POST.get("password")
         try:
-            user = Signup.objects.get(email=email, password=password)
-            # 로그인 성공 시 세션에 회원 정보 저장
-            request.session["user_email"] = user.email
-            request.session["user_name"] = user.name
-            return JsonResponse({"status": "success", "user_name": user.name})
+            user = Signup.objects.get(email=email)
+            # 활성화 상태가 아니면 로그인 실패 처리
+            if not user.is_active:
+                return JsonResponse({"status": "error", "message": "아이디 또는 비밀번호가 올바르지 않습니다."}, status=403)
+            if check_password(password, user.password):
+                request.session["user_email"] = user.email
+                request.session["user_name"] = user.name
+                return JsonResponse({"status": "success", "user_name": user.name})
+            else:
+                raise Signup.DoesNotExist
         except Signup.DoesNotExist:
             return JsonResponse({"status": "error", "message": "아이디 또는 비밀번호가 올바르지 않습니다."}, status=400)
     else:
@@ -73,13 +119,14 @@ def logout_view(request):
     request.session.flush()  # 세션 데이터 초기화
     return redirect('main_page')
 
+
 @csrf_exempt
 def password_reset_view(request):
     """
     비밀번호 찾기:
-    POST 요청으로 이메일과 이름을 받아 회원 정보를 확인하고,
-    임시 비밀번호를 생성하여 회원의 비밀번호를 업데이트합니다.
-    (실제 운영 시, 임시 비밀번호를 이메일로 전송하도록 구현)
+    사용자가 본인의 이메일과 이름을 입력하면, 해당 회원 정보를 확인하고,
+    임시 비밀번호(8자리)를 생성하여 회원의 비밀번호를 해시 처리한 후 업데이트하고,
+    전용 발신자 계정을 사용하여 임시 비밀번호를 이메일로 전송합니다.
     """
     if request.method == "POST":
         email = request.POST.get("email")
@@ -87,34 +134,33 @@ def password_reset_view(request):
         try:
             user = Signup.objects.get(email=email, name=name)
         except Signup.DoesNotExist:
-            return JsonResponse({
-                "status": "error",
-                "message": "해당 회원 정보를 찾을 수 없습니다."
-            }, status=400)
+            return JsonResponse({"status": "error", "message": "해당 회원 정보를 찾을 수 없습니다."}, status=400)
 
         # 임시 비밀번호 생성 (8자리)
         temp_password = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
 
-        # 임시 비밀번호로 업데이트 (실제 환경에서는 비밀번호 암호화 필요)
-        user.password = temp_password
+        # 비밀번호 해시 처리 후 업데이트
+        user.password = make_password(temp_password)
         user.save()
 
-        # 실제 메일 전송 코드 (메일 설정 완료 시 사용)
-        # send_mail(
-        #     subject="여행 플래너 임시 비밀번호",
-        #     message=f"임시 비밀번호는 {temp_password}입니다. 로그인 후 반드시 비밀번호를 변경해주세요.",
-        #     from_email="no-reply@yourdomain.com",
-        #     recipient_list=[email],
-        #     fail_silently=False,
-        # )
+        # 이메일 전송 (전용 발신자 계정을 사용하여 settings.py의 EMAIL 설정에 따라 처리됨)
+        subject = "여행 플래너 임시 비밀번호 안내"
+        message = (
+            f"안녕하세요, {user.name}님.\n\n"
+            f"요청하신 임시 비밀번호는 {temp_password} 입니다.\n"
+            "로그인 후 반드시 비밀번호를 변경해 주세요.\n\n"
+            "감사합니다."
+        )
+        recipient_list = [user.email]
 
-        # 테스트용: 임시 비밀번호를 JSON 응답으로 반환 (실제 운영 시에는 반환하지 않음)
-        return JsonResponse({
-            "status": "success",
-            "message": f"임시 비밀번호가 {temp_password}로 설정되었습니다. 이메일을 확인하세요."
-        })
+        try:
+            send_mail(subject, message, None, recipient_list, fail_silently=False)
+            # 발신자 정보를 생략하면 settings.py의 DEFAULT_FROM_EMAIL이 사용됩니다.
+        except Exception as e:
+            return JsonResponse({"status": "error", "message": f"이메일 전송에 실패했습니다: {e}"}, status=500)
+
+        return JsonResponse({"status": "success", "message": "임시 비밀번호가 이메일로 전송되었습니다. 이메일을 확인해 주세요."})
     else:
-        # GET 요청 시 비밀번호 찾기 페이지 렌더링
         return render(request, 'planner/password_reset.html')
 
 def search_view(request):
@@ -138,10 +184,12 @@ def my_page_view(request):
         return redirect('login')
     return render(request, 'planner/my_page.html', {'user': user})
 
+
 @csrf_exempt
 def update_profile_view(request):
     """
-    회원정보 수정: POST 요청으로 수정된 데이터를 받아 회원 정보를 업데이트합니다.
+    회원정보 수정: 로그인한 사용자의 정보를 업데이트합니다.
+    선택적으로 새 비밀번호와 새 비밀번호 재확인을 입력하여 비밀번호를 변경할 수 있습니다.
     """
     user_email = request.session.get('user_email')
     if not user_email:
@@ -150,6 +198,7 @@ def update_profile_view(request):
         user = Signup.objects.get(email=user_email)
     except Signup.DoesNotExist:
         return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
+
     if request.method == 'POST':
         user.name = request.POST.get('name', user.name)
         user.addr = request.POST.get('addr', user.addr)
@@ -157,6 +206,20 @@ def update_profile_view(request):
         birth = request.POST.get('birth')
         if birth:
             user.birth = birth
+
+        # 새 비밀번호 업데이트 (선택적)
+        new_password = request.POST.get('new_password')
+        new_password_confirm = request.POST.get('new_password_confirm')
+        if new_password or new_password_confirm:
+            if new_password != new_password_confirm:
+                return JsonResponse({"status": "error", "message": "새 비밀번호와 재확인이 일치하지 않습니다."}, status=400)
+            # 비밀번호 형식 검증: 8~16자, 영문 대소문자, 숫자, 특수문자 포함
+            var_password_pattern = r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};\'":\\|,.<>\/?]).{8,16}$'
+            if not re.match(var_password_pattern, new_password):
+                return JsonResponse({"status": "error", "message": "새 비밀번호는 8~16자 영문 대소문자, 숫자, 특수문자를 포함해야 합니다."},
+                                    status=400)
+            user.password = make_password(new_password)
+
         user.save()
         return JsonResponse({"status": "success", "message": "회원정보가 업데이트 되었습니다."})
     else:
@@ -165,7 +228,8 @@ def update_profile_view(request):
 @csrf_exempt
 def delete_profile_view(request):
     """
-    회원탈퇴: POST 요청 시 현재 회원 정보를 삭제합니다.
+    회원탈퇴: 로그인한 사용자가 자신의 회원정보를 탈퇴 처리합니다.
+    실제로 데이터를 삭제하는 대신, is_active 값을 False로 설정합니다.
     """
     user_email = request.session.get('user_email')
     if not user_email:
@@ -175,12 +239,14 @@ def delete_profile_view(request):
     except Signup.DoesNotExist:
         return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
     if request.method == 'POST':
-        user.delete()
-        request.session.flush()  # 세션 초기화
+        # 탈퇴 시 is_active를 False로 변경
+        user.is_active = False
+        user.save()
+        # 세션 초기화
+        request.session.flush()
         return JsonResponse({"status": "success", "message": "회원탈퇴가 완료되었습니다."})
     else:
         return render(request, 'planner/delete_profile.html', {'user': user})
-
 
 @csrf_exempt
 def plan_schedule_view(request):

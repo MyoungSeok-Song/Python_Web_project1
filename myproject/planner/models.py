@@ -1,5 +1,6 @@
 from django.db import models
 from django.utils import timezone
+from django.contrib.auth.hashers import make_password
 
 
 # Create your models here.
@@ -12,8 +13,16 @@ class Signup(models.Model):
     addr = models.CharField(max_length=200, blank=True)
     phone_num = models.CharField(max_length=20, blank=True)
 
+    # 회원 활성화 여부: True이면 활성, False이면 비활성 (탈퇴한 상태)
+    is_active = models.BooleanField(default=True)
+
     def __str__(self):
         return self.email
+
+    # 편의를 위해 set_password 메서드를 추가할 수도 있습니다.
+    def set_password(self, raw_password):
+        self.password = make_password(raw_password)
+        self.save()
 
 # 2) 여행 일정 테이블
 class Planner(models.Model):
@@ -74,3 +83,4 @@ class Comment(models.Model):
 
     def __str__(self):
         return f"Comment {self.id} by {self.author.email}"
+
