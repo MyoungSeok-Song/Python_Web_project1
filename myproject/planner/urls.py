@@ -11,6 +11,7 @@ urlpatterns = [
     path('update_profile/', views.update_profile_view, name='update_profile'),
     path('delete_profile/', views.delete_profile_view, name='delete_profile'),
     path('plan_schedule/', views.plan_schedule_view, name='plan_schedule'),
+    path('save_schedule/', views.save_schedule_view, name='save_schedule'),
     # 게시판 관련 URL
     path('board/', views.board_list, name='board_list'),
     path('board/create/', views.board_create, name='board_create'),

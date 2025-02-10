@@ -2,144 +2,389 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <title>일정 만들기 - 여행 플래너</title>
-    <!-- Bootstrap CSS (CDN 사용) -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-      /* 지도 영역의 크기 지정 */
-      #map {
-          height: 400px;
-          width: 100%;
-      }
-    </style>
+  <meta charset="UTF-8">
+  <title>일정 만들기 - 여행 플래너</title>
+  <!-- Bootstrap CSS (CDN) -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <style>
+    /* 상단 캘린더 입력 영역 (헤더) */
+    .calendar-header {
+      background-color: #f1f3f5;
+      padding: 15px;
+      border-radius: 5px;
+      margin-top: 20px;
+    }
+    .calendar-header .form-control {
+      display: inline-block;
+      width: auto;
+      margin-right: 10px;
+    }
+    .calendar-header .btn {
+      margin-left: 10px;
+    }
+    /* 메인 콘텐츠 영역 */
+    .main-content {
+      margin-top: 30px;
+    }
+    /* 첫 번째 열: DAY Planner */
+    .day-planner {
+      background-color: #f8f9fa;
+      padding: 15px;
+      border-radius: 5px;
+      min-height: 300px;
+    }
+    .day-btn {
+      width: 100%;
+      margin-bottom: 5px;
+    }
+    /* 두 번째 열: 선택된 일정 */
+    .selected-itinerary {
+      background-color: #fff;
+      border: 1px solid #dee2e6;
+      padding: 15px;
+      border-radius: 5px;
+      min-height: 300px;
+    }
+    .itinerary-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #dee2e6;
+      padding: 5px 0;
+    }
+    .itinerary-item .delete-btn {
+      font-size: 1rem;
+      color: red;
+      cursor: pointer;
+      margin-left: 10px;
+    }
+    /* 세 번째 열: 추천 장소 영역 */
+    .recommended-places {
+      background-color: #fff;
+      border: 1px solid #dee2e6;
+      padding: 15px;
+      border-radius: 5px;
+      min-height: 300px;
+    }
+    .recommended-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 1px solid #dee2e6;
+      padding: 5px 0;
+    }
+    .recommended-item .add-btn {
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    /* 네 번째 열: 지도 영역 */
+    .map-container {
+      width: 100%;
+    }
+    #map {
+      height: 400px;
+      width: 100%;
+    }
+  </style>
 </head>
 <body>
-    <div class="container mt-5">
-        <h2>일정 만들기</h2>
-        {% if destination %}
-            <p>선택한 여행지: <strong>{{ destination }}</strong></p>
-        {% else %}
-            <p>여행지를 선택해 주세요.</p>
-        {% endif %}
-
-        <!-- 구글맵 영역 -->
-        <div id="map"></div>
-
-        <!-- 추천 장소 목록 -->
-        <h4 class="mt-4">추천 장소</h4>
-        {% if recommended_places %}
-            <div class="list-group">
-                {% for place in recommended_places %}
-                    <a href="#" class="list-group-item list-group-item-action">
-                        <h5 class="mb-1">{{ place.name }}</h5>
-                        <p class="mb-1">주소: {{ place.address }}</p>
-                        <small>{{ place.description }}</small>
-                    </a>
-                {% endfor %}
-            </div>
-        {% else %}
-            <p>추천 장소 정보가 없습니다.</p>
-        {% endif %}
-
-        <!-- 일정 작성 폼 -->
-        <hr>
-        <h4>일정 작성</h4>
-        <form id="planScheduleForm" method="post">
-            {% csrf_token %}
-            <!-- 여행지 및 추천 관광지 정보를 hidden 필드로 전달 -->
-            <input type="hidden" name="destination" value="{{ destination }}">
-            {% if recommended_places|length > 0 %}
-            <input type="hidden" name="tour_title" value="{{ recommended_places.0.name }}">
-            {% else %}
-            <input type="hidden" name="tour_title" value="">
-            {% endif %}
-            <div class="mb-3">
-                <label for="planTitle" class="form-label">일정 제목</label>
-                <input type="text" class="form-control" id="planTitle" name="plan_title" placeholder="예: 1일차 여행 계획" required>
-            </div>
-            <div class="mb-3">
-                <label for="planMemo" class="form-label">세부 일정</label>
-                <textarea class="form-control" id="planMemo" name="plan_memo" rows="3" placeholder="세부 일정 내용" required></textarea>
-            </div>
-            <button type="submit" class="btn btn-primary">일정 저장</button>
-        </form>
-        <br>
-        <a href="{% url 'main_page' %}" class="btn btn-secondary">홈으로</a>
+  <!-- 상단 캘린더 입력 영역 (헤더) -->
+  <div class="container calendar-header">
+    <div class="row align-items-center">
+      <!-- 여행 제목 입력 -->
+      <div class="col-md-4">
+        <input type="text" id="travelTitle" class="form-control" placeholder="전체 여행 제목 입력">
+      </div>
+      <!-- 여행 시작일과 종료일 입력 -->
+      <div class="col-md-4">
+        <input type="date" id="globalStartDate" class="form-control">
+        <input type="date" id="globalEndDate" class="form-control mt-1">
+      </div>
+      <!-- 저장 및 닫기 버튼 (상단 오른쪽) -->
+      <div class="col-md-4 text-end">
+        <button type="button" id="saveSchedule" class="btn btn-primary">일정 저장</button>
+        <button type="button" id="closeSchedule" class="btn btn-secondary">닫기</button>
+      </div>
     </div>
+  </div>
 
-    <!-- JSON 데이터를 담은 스크립트 블록 -->
-    <script id="places-data" type="application/json">
-    {{ recommended_json|safe }}
-    </script>
+  <!-- 메인 콘텐츠 영역: 4열 레이아웃 -->
+  <div class="container main-content">
+    <div class="row">
+      <!-- 첫 번째 열: DAY Planner -->
+      <div class="col-md-3">
+        <div class="day-planner">
+          <h5>일정</h5>
+          <!-- DAY 버튼들이 동적으로 생성될 영역 -->
+          <div id="dayButtons"></div>
+        </div>
+      </div>
+      <!-- 두 번째 열: 선택된 일정 (현재 선택된 DAY의 일정 항목) -->
+      <div class="col-md-3">
+        <div class="selected-itinerary">
+          <div id="selectedItinerary">
+            <!-- updateItineraryDisplay() 함수가 "DAY X"를 바로 표시하게 됩니다. -->
+          </div>
+        </div>
+      </div>
+      <!-- 세 번째 열: 추천 장소 영역 및 검색 -->
+      <div class="col-md-3">
+        <div class="recommended-places">
+          <h5>추천 장소</h5>
+          <div class="mb-3">
+            <input type="text" id="recommendSearch" class="form-control" placeholder="추천 장소 검색">
+          </div>
+          <div id="recommendedList">
+            {% for place in recommended_places %}
+              <div class="recommended-item">
+                <span>{{ place.name }}</span>
+                <button type="button" class="btn btn-sm btn-success add-place" data-place='{{ place|json_script:"place_data_" }}'>+</button>
+              </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      <!-- 네 번째 열: 구글 지도 영역 -->
+      <div class="col-md-3">
+        <div class="map-container">
+          <h5>지도</h5>
+          <div id="map"></div>
+        </div>
+      </div>
+    </div>
+  </div>
 
-    <!-- jQuery (CDN 사용) - AJAX 요청을 위해 사용 -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <!-- Bootstrap JS (CDN 사용) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- 로그인 모달 (기존) -->
+  <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <form id="loginForm">
+          <div class="modal-header">
+            <h5 class="modal-title" id="loginModalLabel">로그인</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label for="loginEmail" class="form-label">이메일</label>
+              <input type="email" class="form-control" id="loginEmail" name="email" required>
+              <div id="loginEmailError" class="error-message">
+                올바른 이메일 형식이 아닙니다. 다시 입력해 주세요.
+              </div>
+            </div>
+            <div class="mb-3">
+              <label for="loginPassword" class="form-label">비밀번호</label>
+              <input type="password" class="form-control" id="loginPassword" name="password" required>
+            </div>
+          </div>
+          <div class="modal-footer d-flex flex-column">
+            <button type="submit" class="btn btn-primary w-100">로그인</button>
+            <div class="mt-2">
+              <a href="{% url 'signup' %}">회원가입</a> |
+              <a href="{% url 'password_reset' %}">비밀번호 찾기</a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 
-    <!-- 구글맵 API 로드 (API 키 사용) -->
-    <script async defer
-      src="https://maps.googleapis.com/maps/api/js?key={{ google_map_api_key }}&callback=initMap">
-    </script>
-    <script>
-      // 지도 초기화 함수
-      function initMap() {
-          // 지도 중심을 첫번째 추천 장소 좌표로 설정 (없으면 기본 좌표)
-          var mapCenter = { lat: 33.3617, lng: 126.5297 };
-          var placesDataElem = document.getElementById('places-data');
-          var places = [];
-          if (placesDataElem) {
-              try {
-                  places = JSON.parse(placesDataElem.textContent);
-                  if (places.length > 0) {
-                      mapCenter = { lat: parseFloat(places[0].lat), lng: parseFloat(places[0].lng) };
-                  }
-              } catch(e) {
-                  console.error("Error parsing places data", e);
-              }
-          }
-          var map = new google.maps.Map(document.getElementById('map'), {
-              zoom: 12,
-              center: mapCenter
-          });
+  <!-- jQuery (CDN) -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <!-- Bootstrap JS (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Google Maps API (API 키 교체 필요) -->
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key={{ google_map_api_key }}&callback=initMap"></script>
 
-          // 추천 장소들을 마커로 표시
-          for (var i = 0; i < places.length; i++) {
-              var place = places[i];
-              new google.maps.Marker({
-                  position: { lat: parseFloat(place.lat), lng: parseFloat(place.lng) },
-                  map: map,
-                  title: place.name
-              });
-          }
-      }
-    </script>
+  <script>
+    // 전역 변수: 현재 선택된 DAY와 각 DAY의 itinerary 저장 객체
+    var currentDay = null;
+    var itineraries = {}; // 예: {1: [], 2: [], ...}
 
-    <!-- AJAX를 이용한 일정 작성 폼 제출 처리 -->
-    <script>
-      $(document).ready(function(){
-        $("#planScheduleForm").submit(function(event){
-          event.preventDefault();
-          $.ajax({
-            url: "{% url 'plan_schedule' %}",
-            type: "POST",
-            data: $(this).serialize(),
-            headers: {
-              "X-CSRFToken": "{{ csrf_token }}"
-            },
-            success: function(response){
-              if(response.status === "success"){
-                alert(response.message);
-                window.location.href = "{% url 'main_page' %}";
-              }
-            },
-            error: function(xhr){
-              alert("오류: " + xhr.responseJSON.message);
+    // 구글 지도 초기화 함수
+    function initMap() {
+      var mapCenter = {
+        lat: parseFloat("{{ map_center.lat }}"),
+        lng: parseFloat("{{ map_center.lng }}")
+      };
+      var map = new google.maps.Map(document.getElementById('map'), {
+        zoom: 12,
+        center: mapCenter
+      });
+      // 추천 장소 마커 추가 (필요시 구현)
+    }
+
+    $(document).ready(function(){
+      console.log("Document ready");
+
+      // 로그인 모달: 이메일 정규식 및 검증
+      var emailRegex = /^[\w\.-]+@[\w\.-]+\.\w+$/;
+      $("#loginEmail").on("blur keyup", function(){
+        var email = $(this).val();
+        if (!emailRegex.test(email)) {
+          $("#loginEmailError").show();
+        } else {
+          $("#loginEmailError").hide();
+        }
+      });
+      $("#loginForm").submit(function(event){
+        event.preventDefault();
+        var email = $("#loginEmail").val();
+        if (!emailRegex.test(email)) {
+          $("#loginEmailError").show();
+          return false;
+        }
+        var formData = $(this).serialize();
+        $.ajax({
+          url: "{% url 'login' %}",
+          type: "POST",
+          data: formData,
+          headers: { "X-CSRFToken": "{{ csrf_token }}" },
+          success: function(response){
+            if(response.status === "success"){
+              alert("로그인 성공: " + response.user_name);
+              location.reload();
             }
-          });
+          },
+          error: function(xhr, status, error){
+            alert("로그인 실패: " + xhr.responseJSON.message);
+          }
         });
       });
-    </script>
+
+      // 여행지 검색 버튼 클릭 시
+      $("#travelSearchBtn").click(function(){
+        var searchValue = $("#travelSearchInput").val().trim();
+        if(searchValue) {
+          window.location.href = "{% url 'plan_schedule' %}?destination=" + encodeURIComponent(searchValue);
+        } else {
+          alert("검색어를 입력해 주세요.");
+        }
+      });
+
+      // 상단 캘린더 입력: 날짜 변경 시 자동으로 DAY 버튼 생성 (저장로직과 연동)
+      $("#globalStartDate, #globalEndDate").on("change", function(){
+        var startDate = $("#globalStartDate").val();
+        var endDate = $("#globalEndDate").val();
+        if (!startDate || !endDate) return;
+        var start = new Date(startDate);
+        var end = new Date(endDate);
+        if (end < start) {
+          alert("종료 날짜는 시작 날짜보다 뒤여야 합니다.");
+          return;
+        }
+        var timeDiff = end - start;
+        var days = Math.floor(timeDiff / (1000 * 60 * 60 * 24)) + 1;
+        $("#dayButtons").empty();
+        itineraries = {};
+        for (var i = 1; i <= days; i++) {
+          itineraries[i] = [];
+          $("#dayButtons").append(`<button type="button" class="btn btn-outline-secondary mb-2 day-btn" data-day="${i}">DAY ${i}</button>`);
+        }
+        currentDay = 1;
+        $(".day-btn").first().addClass("active");
+        updateItineraryDisplay();
+      });
+
+      // DAY 버튼 클릭 시: 현재 선택된 DAY 업데이트 및 일정 영역 갱신
+      $(document).on("click", ".day-btn", function(){
+        $(".day-btn").removeClass("active");
+        $(this).addClass("active");
+        currentDay = $(this).data("day");
+        updateItineraryDisplay();
+      });
+
+      // 추천 장소 '+' 버튼 클릭 시: 현재 선택된 DAY에 장소 추가
+      $(document).on("click", ".add-place", function(){
+        var placeData = $(this).data('place_data_');
+        if (!currentDay) {
+          alert("먼저 날짜를 설정해 주세요.");
+          return;
+        }
+        itineraries[currentDay].push(placeData);
+        updateItineraryDisplay();
+      });
+
+      // 선택된 일정 영역: 삭제 버튼 클릭 시
+      $(document).on("click", ".delete-btn", function(){
+        var idx = $(this).closest(".itinerary-item").data("index");
+        itineraries[currentDay].splice(idx, 1);
+        updateItineraryDisplay();
+      });
+
+      // 함수: 선택된 일정 영역 업데이트
+      function updateItineraryDisplay() {
+        $("#selectedItinerary").empty();
+        // 바로 현재 선택된 DAY를 제목처럼 표시
+        $("#selectedItinerary").append("<h3>DAY " + currentDay + "</h3>");
+
+        var items = itineraries[currentDay];
+        if (!items || items.length === 0) {
+          $("#selectedItinerary").append("<p>일정이 없습니다.</p>");
+        } else {
+          items.forEach(function(item, index){
+            var html = `<div class="itinerary-item" data-index="${index}">
+                          <span>${item.name}</span>
+                          <input type="text" class="form-control form-control-sm itinerary-memo" placeholder="메모">
+                          <span class="delete-btn">&times;</span>
+                        </div>`;
+            $("#selectedItinerary").append(html);
+          });
+        }
+      }
+
+      // 저장 버튼 클릭 시: 전체 캘린더 입력과 DAY별 itinerary 데이터를 JSON으로 서버에 전송
+      $("#saveSchedule").click(function(){
+        var travelTitle = $("#travelTitle").val().trim();
+        var startDate = $("#globalStartDate").val();
+        var endDate = $("#globalEndDate").val();
+        var destination = $("#destinationDisplay").text().trim();
+
+        if (!travelTitle) {
+          alert("여행 제목을 입력해 주세요.");
+          return;
+        }
+        if (!startDate || !endDate) {
+          alert("여행 시작일과 종료일을 모두 입력해 주세요.");
+          return;
+        }
+        // destination이 "여행지 선택 안됨"으로 표시된다면 이를 빈 값으로 처리
+        if (destination === "여행지 선택 안됨" || destination === "") {
+          alert("여행지를 선택해 주세요.");
+          return;
+        }
+
+        // 구성할 payload 객체
+        var payload = {
+          travel_title: travelTitle,
+          start_date: startDate,
+          end_date: endDate,
+          destination: destination,
+          itineraries: itineraries
+        };
+
+        $.ajax({
+          url: "{% url 'save_schedule' %}",
+          type: "POST",
+          data: JSON.stringify(payload),
+          contentType: "application/json",
+          headers: { "X-CSRFToken": "{{ csrf_token }}" },
+          success: function(response){
+            alert(response.message);
+            window.location.href = "{% url 'main_page' %}";
+          },
+          error: function(xhr){
+            alert("오류: " + xhr.responseJSON.message);
+          }
+        });
+      });
+
+      // 닫기 버튼 클릭 시
+      $("#closeSchedule").click(function(){
+        if (confirm("정말 닫으시겠습니까? 변경사항은 저장되지 않습니다.")) {
+          location.reload();
+        }
+      });
+    });
+  </script>
 </body>
 </html>
