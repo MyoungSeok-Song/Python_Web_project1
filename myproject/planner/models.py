@@ -54,7 +54,7 @@ class PlannerDetail(models.Model):
     planner = models.ForeignKey(Planner, on_delete=models.CASCADE)
     signup = models.ForeignKey(Signup, on_delete=models.CASCADE)
     title = models.ForeignKey(Tourlist, on_delete=models.CASCADE)
-    wdate = models.DateField(null=True, blank=True)
+    wdate = models.CharField(max_length=200, blank=True)
     memo = models.TextField(blank=True)
 
     def __str__(self):
