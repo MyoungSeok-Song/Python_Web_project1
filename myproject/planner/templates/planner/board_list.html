@@ -1,3 +1,10 @@
+{% if messages %}
+  {% for message in messages %}
+    <div class="alert alert-warning" role="alert">
+      {{ message }}
+    </div>
+  {% endfor %}
+{% endif %}
 {% load static %}
 <!DOCTYPE html>
 <html lang="ko">

@@ -50,11 +50,12 @@ class Tourlist(models.Model):
 
 # 4) 일정 상세 테이블
 class PlannerDetail(models.Model):
-    plan_name = models.CharField(max_length=200, primary_key=True)  # 상세 일정 제목 (예: "1일차 계획")
-    planner = models.ForeignKey(Planner, on_delete=models.CASCADE)
+    pd_no = models.AutoField(primary_key=True)
+    plan_name = models.CharField(max_length=200)  # 상세 일정 제목 (예: "1일차 계획")
+    planner = models.ForeignKey(Planner, on_delete=models.CASCADE, db_column='planner_fk')
     signup = models.ForeignKey(Signup, on_delete=models.CASCADE)
     title = models.ForeignKey(Tourlist, on_delete=models.CASCADE)
-    wdate = models.CharField(max_length=200, blank=True)
+    wdate = models.CharField(max_length=200, null=True, blank=True)
     memo = models.TextField(blank=True)
 
     def __str__(self):
@@ -83,4 +84,3 @@ class Comment(models.Model):
 
     def __str__(self):
         return f"Comment {self.id} by {self.author.email}"
-

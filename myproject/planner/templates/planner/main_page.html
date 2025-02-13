@@ -4,9 +4,12 @@
 <head>
   <meta charset="UTF-8">
   <title>여행 플래너 - 메인페이지</title>
-  <!-- Bootstrap CSS (CDN 사용) -->
+  <!-- Bootstrap CSS (CDN) -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- 사용자 정의 CSS -->
+  <link rel="stylesheet" href="{% static 'css/main_page.css' %}">
   <style>
+    /* 아래는 간단한 스타일 예시입니다. 필요에 맞게 수정하세요. */
     .error-message {
       color: red;
       font-size: 0.9rem;
@@ -27,80 +30,100 @@
       margin-top: 5px;
       font-weight: bold;
     }
-    /* 메인 콘텐츠와 캐러셀의 폭을 통일하기 위한 컨테이너 */
     .main-container {
-      max-width: 1140px;  /* 원하는 최대 너비로 조정 (예: 1140px) */
+      max-width: 1140px; /* 원하는 최대 너비 */
       margin: 0 auto;
     }
-    /* 캐러셀 영역 CSS 수정 */
+    /* 캐러셀 관련 */
     #carouselExampleIndicators {
       margin-bottom: 30px;
     }
     #carouselExampleIndicators .carousel-inner img {
-      height: 400px;           /* 고정 높이 */
-      width: 100%;             /* 컨테이너 너비에 맞춤 */
-      object-fit: contain;     /* 전체 이미지가 보이도록, 빈 공간은 배경색으로 채움 */
-      background-color: #f8f9fa; /* 빈 공간 배경색 */
+      height: 400px;
+      width: 100%;
+      object-fit: contain;
+      background-color: #f8f9fa;
     }
   </style>
 </head>
 <body>
-  <!-- 전체 콘텐츠를 감싸는 메인 컨테이너 (헤더, 캐러셀, 콘텐츠 영역 통일) -->
-  <div class="main-container">
-    <!-- 헤더 영역 -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-light">
-      <div class="container-fluid">
-        <a class="navbar-brand" href="#">여행 플래너</a>
-        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-          <span class="navbar-toggler-icon"></span>
-        </button>
-        <!-- 전체 메뉴를 하나의 ul로 묶고, ms-auto로 오른쪽 정렬 -->
-        <div class="collapse navbar-collapse" id="navbarNav">
-          <ul class="navbar-nav ms-auto">
-            <li class="nav-item">
-              <a class="nav-link" href="#">이용방법</a>
-            </li>
-            <li class="nav-item">
-              <a class="nav-link" href="{% url 'board_list' %}">게시판</a>
-            </li>
-            {% if request.session.user_email %}
-              <li class="nav-item dropdown">
-                <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
-                   data-bs-toggle="dropdown" aria-expanded="false">
-                  {{ request.session.user_name }}님
-                </a>
-                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                  <li><a class="dropdown-item" href="{% url 'my_page' %}">마이페이지</a></li>
-                  <li><a class="dropdown-item" href="{% url 'logout' %}">로그아웃</a></li>
-                </ul>
-              </li>
-            {% else %}
-              <li class="nav-item">
-                <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#loginModal">로그인</a>
-              </li>
-            {% endif %}
-          </ul>
-        </div>
-      </div>
-    </nav>
 
-    <!-- 캐러셀 영역 -->
+  <!--
+      [중요] nav 태그에 .navbar-expand-lg를 적용하고,
+      안쪽에 '단 하나의' .container (또는 .container-fluid)를 두어
+      브랜드 / 토글 버튼 / 메뉴 항목을 한 줄에서 관리
+  -->
+  <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container">
+      <!-- 브랜드(왼쪽) -->
+      <a class="navbar-brand" href="#">여행 플래너</a>
+
+      <!-- 토글 버튼(화면이 작아지면 나타남) -->
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+              data-bs-target="#navbarNav" aria-controls="navbarNav"
+              aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+
+      <!-- 실제 메뉴 (오른쪽) -->
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item">
+            <a class="nav-link" href="#">이용방법</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="{% url 'board_list' %}">게시판</a>
+          </li>
+          {% if request.session.user_email %}
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
+                 data-bs-toggle="dropdown" aria-expanded="false">
+                {{ request.session.user_name }}님
+              </a>
+              <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                <li><a class="dropdown-item" href="{% url 'my_page' %}">마이페이지</a></li>
+                <li><a class="dropdown-item" href="{% url 'logout' %}">로그아웃</a></li>
+              </ul>
+            </li>
+          {% else %}
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#loginModal">로그인</a>
+            </li>
+          {% endif %}
+        </ul>
+      </div>
+    </div> <!-- /.container -->
+  </nav>
+
+  <!-- 메인 영역 -->
+  <div class="main-container">
+    <p class="tour-title mt-3">인기 여행지 Top5</p>
+    <p class="tour-description">여행 플래너 유저들이 뽑은 인기 국내 여행지 Top5를 소개합니다!</p>
+
+    <!-- 캐러셀 -->
     <div id="carouselExampleIndicators" class="carousel slide" data-bs-ride="carousel">
       <div class="carousel-indicators">
         <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="0" class="active"></button>
         <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="1"></button>
         <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="2"></button>
+        <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="3"></button>
+        <button type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide-to="4"></button>
       </div>
       <div class="carousel-inner">
         <div class="carousel-item active">
-          <img src="{% static 'images/slide1.jpg' %}" class="d-block w-100" alt="Slide 1">
+          <img src="{% static 'images/regions/seoul1.jpg' %}" class="d-block w-100" alt="Slide 1">
         </div>
         <div class="carousel-item">
-          <img src="{% static 'images/slide2.jpg' %}" class="d-block w-100" alt="Slide 2">
+          <img src="{% static 'images/regions/busan1.jpg' %}" class="d-block w-100" alt="Slide 2">
         </div>
         <div class="carousel-item">
-          <img src="{% static 'images/slide3.jpg' %}" class="d-block w-100" alt="Slide 3">
+          <img src="{% static 'images/regions/jeju1.jpg' %}" class="d-block w-100" alt="Slide 3">
+        </div>
+        <div class="carousel-item">
+          <img src="{% static 'images/regions/chuncheon1.jpg' %}" class="d-block w-100" alt="Slide 4">
+        </div>
+        <div class="carousel-item">
+          <img src="{% static 'images/regions/yeosu1.jpg' %}" class="d-block w-100" alt="Slide 5">
         </div>
       </div>
       <button class="carousel-control-prev" type="button" data-bs-target="#carouselExampleIndicators" data-bs-slide="prev">
@@ -111,9 +134,9 @@
       </button>
     </div>
 
-    <!-- 메인 콘텐츠 영역: 여행지 검색 및 여행지 그리드 -->
+    <!-- 검색창 및 여행지 목록 -->
     <div class="container mt-5">
-      <!-- 여행지 검색 입력란 -->
+      <!-- 검색 입력란 -->
       <div class="row mb-4">
         <div class="col-12">
           <div class="input-group">
@@ -122,37 +145,37 @@
           </div>
         </div>
       </div>
-
-      <!-- 여행지 그리드 (3행 4열) -->
+      <p class="tour-title">국내 여행</p>
+      <p class="tour-description">한국인들이 사랑하는 국내 여행지</p>
       <div class="row">
         {% for region in regions %}
-          <div class="col-md-3 col-sm-6">
+          <div class="col-md-4 col-sm-6">
             <div class="region-card">
-              <a href="{% url 'plan_schedule' %}?destination={{ region.name }}">
+<!--              <a href="{% url 'plan_schedule' %}?destination={{ region.name }}">-->
+              <a class="region-link" href="{% url 'plan_schedule' %}?destination={{ region.name }}">
                 <img src="{% static 'images/regions/'|add:region.img %}" alt="{{ region.name }}">
                 <div class="region-name">{{ region.name }}</div>
               </a>
             </div>
           </div>
-          {% if forloop.counter|divisibleby:"4" and not forloop.last %}
+          {% if forloop.counter|divisibleby:"3" and not forloop.last %}
             </div><div class="row">
           {% endif %}
         {% endfor %}
       </div>
     </div>
-  </div> <!-- .main-container 끝 -->
+  </div> <!-- /.main-container -->
 
-  <!-- 로그인 모달 창 -->
+  <!-- 로그인 모달 -->
   <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-centered">
       <div class="modal-content">
         <form id="loginForm">
           <div class="modal-header">
-            <h5 class="modal-title" id="loginModalLabel">로그인</h5>
+            <h3 class="modal-title text-center" id="loginModalLabel" style="width: 100%;">로그인</h3>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
           </div>
           <div class="modal-body">
-            <!-- 이메일 입력 -->
             <div class="mb-3">
               <label for="loginEmail" class="form-label">이메일</label>
               <input type="email" class="form-control" id="loginEmail" name="email" required>
@@ -160,14 +183,13 @@
                 올바른 이메일 형식이 아닙니다. 다시 입력해 주세요.
               </div>
             </div>
-            <!-- 비밀번호 입력 -->
             <div class="mb-3">
               <label for="loginPassword" class="form-label">비밀번호</label>
               <input type="password" class="form-control" id="loginPassword" name="password" required>
             </div>
           </div>
           <div class="modal-footer d-flex flex-column">
-            <button type="submit" class="btn btn-primary w-100">로그인</button>
+            <button type="submit" class="btn btn-primary w-100"><b>로그인</b></button>
             <div class="mt-2">
               <a href="{% url 'signup' %}">회원가입</a> |
               <a href="{% url 'password_reset' %}">비밀번호 찾기</a>
@@ -178,19 +200,18 @@
     </div>
   </div>
 
-  <!-- jQuery (CDN) -->
-  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-  <!-- Bootstrap JS (CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"></script>
+  <footer class="text-center py-3">
+    <p>&copy; 2025 여행 플래너</p>
+  </footer>
 
+  <!-- jQuery & Bootstrap JS -->
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"></script>
   <script>
     $(document).ready(function(){
-      console.log("Document ready - 로그인 모달 페이지");
-
-      // 로그인 모달: 이메일 정규식
       var emailRegex = /^[\w\.-]+@[\w\.-]+\.\w+$/;
 
-      // 실시간 검증: 이메일 입력란 (blur, keyup)
+      // 실시간 이메일 검증
       $("#loginEmail").on("blur keyup", function(){
         var email = $(this).val();
         if (!emailRegex.test(email)) {
@@ -200,7 +221,7 @@
         }
       });
 
-      // 로그인 폼 제출 시 이메일 형식을 재검증 및 AJAX 요청
+      // 로그인 폼
       $("#loginForm").submit(function(event){
         event.preventDefault();
         var email = $("#loginEmail").val();
@@ -226,7 +247,7 @@
         });
       });
 
-      // 여행지 검색 버튼 클릭 시
+      // 여행지 검색
       $("#travelSearchBtn").click(function(){
         var searchValue = $("#travelSearchInput").val().trim();
         if(searchValue) {

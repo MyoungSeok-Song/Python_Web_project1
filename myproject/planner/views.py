@@ -4,14 +4,15 @@ import random
 import string
 import requests  # 실제 API 호출 시 사용
 from datetime import datetime, timedelta  # 추가: 날짜 계산을 위해
-from django.shortcuts import render, redirect
+from django.shortcuts import render, redirect, get_object_or_404
+from django.utils import timezone
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.core.paginator import Paginator
 from .models import Signup, Planner, Tourlist, PlannerDetail, Board, Comment
 from django.core.mail import send_mail  # 실제 메일 전송 시 사용 (설정 필요)
 from django.contrib.auth.hashers import make_password, check_password  # 해시 처리를 위한 함수
-from .email_utils import send_email_dynamic
+from django.contrib import messages
 
 
 def main_page(request):
@@ -177,7 +178,7 @@ def search_view(request):
 
 def my_page_view(request):
     """
-    마이페이지: 로그인한 사용자의 회원정보와 '나의 일정' (추후 구현 예정)을 표시합니다.
+    마이페이지: 로그인한 사용자의 회원정보와 '나의 일정'을 함께 표시합니다.
     """
     user_email = request.session.get('user_email')
     if not user_email:
@@ -186,8 +187,142 @@ def my_page_view(request):
         user = Signup.objects.get(email=user_email)
     except Signup.DoesNotExist:
         return redirect('login')
-    return render(request, 'planner/my_page.html', {'user': user})
 
+    # Planner 테이블에는 직접 user 정보가 없으므로, PlannerDetail을 통해 연결된 Planner들을 가져옵니다.
+    planners = Planner.objects.filter(plannerdetail__signup=user).distinct()
+    current_date = timezone.now().date()
+
+    # Planner.edate를 기준으로 다가올 여행 일정과 지난 여행 일정을 구분합니다.
+    upcoming_plans = planners.filter(edate__gte=current_date).order_by("sdate")
+    past_plans = planners.filter(edate__lt=current_date).order_by("-sdate")
+
+    # 각 Planner에 대해 여행 제목은 PlannerDetail의 plan_name (예: "서울여행 - ...")에서 추출합니다.
+    def get_travel_title(plan):
+        detail = plan.plannerdetail_set.order_by("wdate").first()
+        if detail and " - " in detail.plan_name:
+            return detail.plan_name.split(" - ")[0]
+        return plan.region  # 없으면 지역명을 대체값으로 사용
+
+    upcoming_list = []
+    for plan in upcoming_plans:
+        upcoming_list.append({
+            "plan_no": plan.plan_no,
+            "travel_title": get_travel_title(plan),
+            "plan_img": plan.plan_img,
+            "sdate": plan.sdate,
+            "edate": plan.edate,
+            "region": plan.region,
+        })
+
+    past_list = []
+    for plan in past_plans:
+        past_list.append({
+            "plan_no": plan.plan_no,
+            "travel_title": get_travel_title(plan),
+            "plan_img": plan.plan_img,
+            "sdate": plan.sdate,
+            "edate": plan.edate,
+            "region": plan.region,
+        })
+
+    context = {
+        "user": user,
+        "upcoming_plans": upcoming_list,
+        "past_plans": past_list,
+    }
+    return render(request, "planner/my_page.html", context)
+
+
+def my_schedule_view(request):
+    # 로그인 체크: 로그인하지 않은 경우 로그인 페이지로 리다이렉트
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return redirect("login")
+    try:
+        user = Signup.objects.get(email=user_email)
+    except Signup.DoesNotExist:
+        return redirect("login")
+
+    # Planner 테이블에는 직접 user 정보가 없으므로, PlannerDetail에서 연결된 Planner들을 가져옵니다.
+    # 각 PlannerDetail은 signup 필드를 가지고 있으므로, 사용자가 작성한 PlannerDetail을 통해 Planner를 추출합니다.
+    planners = Planner.objects.filter(plannerdetail__signup=user).distinct()
+
+    # 현재 날짜 (timezone.now()를 date()로 변환)
+    current_date = timezone.now().date()
+
+    # Planner.edate(여행 종료일)을 기준으로 다가올 여행과 과거 여행을 구분합니다.
+    upcoming_plans = planners.filter(edate__gte=current_date).order_by("sdate")
+    past_plans = planners.filter(edate__lt=current_date).order_by("-sdate")
+
+    # 각 Planner에 대해 여행 제목을 추출합니다.
+    # PlannerDetail의 plan_name은 "여행제목 - ..." 형태로 생성되었다고 가정합니다.
+    def get_travel_title(plan):
+        detail = plan.plannerdetail_set.order_by("wdate").first()
+        if detail and " - " in detail.plan_name:
+            return detail.plan_name.split(" - ")[0]
+        return plan.region  # 없으면 지역명을 대체값으로 사용
+
+    # 여행 목록을 리스트 형태로 준비합니다.
+    upcoming_list = []
+    for plan in upcoming_plans:
+        upcoming_list.append({
+            "plan_no": plan.plan_no,
+            "travel_title": get_travel_title(plan),
+            "plan_img": plan.plan_img,  # 이미지 경로; 없으면 템플릿에서 기본 이미지를 처리
+            "sdate": plan.sdate,
+            "edate": plan.edate,
+            "region": plan.region,
+        })
+
+    past_list = []
+    for plan in past_plans:
+        past_list.append({
+            "plan_no": plan.plan_no,
+            "travel_title": get_travel_title(plan),
+            "plan_img": plan.plan_img,
+            "sdate": plan.sdate,
+            "edate": plan.edate,
+            "region": plan.region,
+        })
+
+    context = {
+        "upcoming_plans": upcoming_list,
+        "past_plans": past_list,
+    }
+    return render(request, "planner/my_schedule.html", context)
+
+
+@csrf_protect
+def schedule_detail_view(request, plan_no):
+    """
+    특정 일정(Planner)의 상세 내용을 보여주는 페이지입니다.
+
+    PlannerDetail 테이블의 모든 항목을 해당 Planner에 대해 조회하고,
+    wdate(일정 날짜)를 기준으로 그룹화하여 각 날짜별 일정 목록을 템플릿에 전달합니다.
+
+    템플릿에서는 Planner(여행 일정) 정보와 함께, 각 날짜별(예: DAY 1, DAY 2, …) 일정 항목(관광지명, 메모 등)을 리스트 형태로 표시합니다.
+    """
+    # plan_no로 Planner 객체를 가져옵니다. (없으면 404)
+    planner = get_object_or_404(Planner, plan_no=plan_no)
+
+    # 해당 Planner에 연결된 PlannerDetail 항목들을 wdate 기준 오름차순으로 조회합니다.
+    details = PlannerDetail.objects.filter(planner=planner).order_by('wdate')
+
+    # wdate(일정 날짜)를 기준으로 PlannerDetail 항목들을 그룹화합니다.
+    itinerary_by_day = {}
+    for detail in details:
+        day = detail.wdate  # detail.wdate는 date 타입입니다.
+        itinerary_by_day.setdefault(day, []).append(detail)
+
+    # 그룹화된 날짜들을 정렬합니다.
+    sorted_days = sorted(itinerary_by_day.keys())
+
+    context = {
+        "planner": planner,
+        "itinerary_by_day": itinerary_by_day,
+        "sorted_days": sorted_days,
+    }
+    return render(request, "planner/schedule_detail.html", context)
 
 @csrf_exempt
 def update_profile_view(request):
@@ -353,14 +488,14 @@ def plan_schedule_view(request):
                         ping=0,
                     )
                 # 고유한 PlannerDetail의 기본키(plan_name) 생성
-                plan_detail_name = f"{travel_title} - DAY {day} - {index}"
+                # plan_detail_name = f"{travel_title} - DAY {day} - {index}"
                 memo_value = item.get("memo", "")
                 PlannerDetail.objects.create(
-                    plan_name=plan_detail_name,  # 고유 기본키
+                    plan_name=travel_title,
                     planner=planner,
                     signup=user,
                     title=tour,  # Tourlist 객체 (기본키: title)
-                    wdate=f"DAY {day_int} - {index}",  # 계산된 날짜
+                    wdate=f"DAY {day_int}",  # 계산된 날짜
                     memo=memo_value
                 )
         return JsonResponse({"status": "success", "message": "일정이 저장되었습니다."})
@@ -484,14 +619,14 @@ def save_schedule_view(request):
                         ping=0,
                     )
                 # 고유한 기본키 생성 (예: "여행제목 - DAY 1 - 1")
-                plan_detail_name = f"{travel_title} - DAY {day} - {index}"
+                # plan_detail_name = f"{travel_title} - DAY {day} - {index}"
                 memo_value = item.get("memo", "")
                 PlannerDetail.objects.create(
-                    plan_name=plan_detail_name,  # 고유 기본키 값
+                    plan_name=travel_title,  # 고유 기본키 값
                     planner=planner,
                     signup=user,
                     title=tour,  # Tourlist 객체와 연동 (Tourlist의 기본키는 title)
-                    wdate=f"DAY {day} - {index}",  # 필요 시 현재 날짜 등으로 설정 가능
+                    wdate=f"DAY {day}",  # 필요 시 현재 날짜 등으로 설정 가능
                     memo=memo_value
                 )
         return JsonResponse({"status": "success", "message": "일정이 저장되었습니다."})
@@ -556,6 +691,21 @@ def update_destination_view(request):
         "recommended_places": recommended_places
     })
 
+@csrf_exempt
+def schedule_delete_view(request, plan_no):
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
+    try:
+        planner = Planner.objects.get(plan_no=plan_no)
+        if not PlannerDetail.objects.filter(planner=planner, signup__email=user_email).exists():
+            return JsonResponse({"status": "error", "message": "삭제 권한이 없습니다."}, status=403)
+        planner.delete()
+        return JsonResponse({"status": "success", "message": "일정이 삭제되었습니다."})
+    except Planner.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "일정을 찾을 수 없습니다."}, status=404)
+
+
 def board_list(request):
     """
     게시판 목록 페이지:
@@ -582,19 +732,14 @@ def board_detail(request, board_id):
 
 @csrf_exempt
 def board_create(request):
-    """
-    게시글 작성 기능 (로그인 필요)
-    AJAX POST 요청을 받아 새 게시글을 생성합니다.
-    """
     user_email = request.session.get("user_email")
-    if not user_email:
-        return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
-    try:
-        author = Signup.objects.get(email=user_email)
-    except Signup.DoesNotExist:
-        return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
-
     if request.method == "POST":
+        if not user_email:
+            return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
+        try:
+            author = Signup.objects.get(email=user_email)
+        except Signup.DoesNotExist:
+            return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
         title = request.POST.get("title")
         content = request.POST.get("content")
         if not title or not content:
@@ -606,7 +751,11 @@ def board_create(request):
         )
         return JsonResponse({"status": "success", "message": "게시글이 작성되었습니다.", "board_id": board.id})
     else:
-        # GET 요청: 게시글 작성 폼 렌더링
+        # GET 요청 시, 로그인하지 않은 경우 board_list 페이지로 리다이렉트하며 메시지 전달
+        if not user_email:
+            messages.error(request, "로그인이 필요합니다.")
+            return redirect('board_list')
+        # 로그인된 상태라면 작성 페이지 렌더링
         return render(request, "planner/board_create.html")
 
 

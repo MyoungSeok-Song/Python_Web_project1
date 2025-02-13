@@ -1,13 +1,84 @@
+{% load static %}
 <!DOCTYPE html>
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
     <title>마이페이지 - 여행 플래너</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding-top: 20px;
+        }
+        .profile-info {
+            margin-bottom: 30px;
+        }
+        .schedule-section {
+            margin-bottom: 40px;
+        }
+        .schedule-item {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            border: 1px solid #dee2e6;
+            border-radius: 5px;
+            background-color: #fff;
+            margin-bottom: 10px;
+            transition: box-shadow 0.2s;
+            position: relative;
+            cursor: pointer;
+        }
+        .schedule-item:hover {
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .schedule-item img {
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 5px;
+            margin-right: 15px;
+        }
+        .schedule-info h5 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+        .schedule-info p {
+            margin: 0;
+            color: #666;
+            font-size: 0.9rem;
+        }
+        .section-title {
+            border-bottom: 2px solid #dee2e6;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+            font-weight: bold;
+            font-size: 1.2rem;
+        }
+        /* 수정 모드 토글 버튼 */
+        .edit-mode-btn {
+            margin-bottom: 15px;
+        }
+        /* 수정/삭제 버튼 오버레이 (수정 모드일 때만 표시) */
+        .action-btns {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            display: none;
+            gap: 5px;
+        }
+        .schedule-item.editable .action-btns {
+            display: flex;
+        }
+    </style>
 </head>
 <body>
    <div class="container mt-5">
-      <h2>마이페이지</h2>
+      <h2 class="mb-4">마이페이지</h2>
+      <div class="profile-info mb-4">
+          <h4>안녕하세요, {{ user.name }}님</h4>
+          <p>이메일: {{ user.email }}</p>
+      </div>
       <!-- 탭 메뉴 -->
       <ul class="nav nav-tabs" id="myTab" role="tablist">
          <li class="nav-item" role="presentation">
@@ -18,9 +89,55 @@
          </li>
       </ul>
       <div class="tab-content" id="myTabContent">
-         <!-- 나의 일정 탭 (추후 구현) -->
+         <!-- 나의 일정 탭 -->
          <div class="tab-pane fade show active" id="schedule" role="tabpanel">
-             <p>나의 일정 내용 (추후 구현 예정)</p>
+             <!-- 수정 모드 토글 버튼 -->
+             <button type="button" id="toggleEditMode" class="btn btn-warning edit-mode-btn">수정 모드 활성화</button>
+
+             <div class="schedule-section">
+                <div class="section-title">다가올 여행 일정</div>
+                {% if upcoming_plans %}
+                   {% for plan in upcoming_plans %}
+                     <div class="schedule-item" data-plan-no="{{ plan.plan_no }}">
+                        <img src="{% if plan.plan_img %}{% static plan.plan_img %}{% else %}{% static 'images/default_trip.jpg' %}{% endif %}" alt="{{ plan.travel_title }}">
+                        <div class="schedule-info">
+                           <h5>{{ plan.travel_title }}</h5>
+                           <p>{{ plan.sdate }} ~ {{ plan.edate }}</p>
+                           <p>{{ plan.region }}</p>
+                        </div>
+                        <!-- 수정/삭제 버튼 (수정 모드에서만 표시) -->
+                        <div class="action-btns">
+                          <button type="button" class="btn btn-sm btn-primary edit-btn">수정</button>
+                          <button type="button" class="btn btn-sm btn-danger delete-btn">X</button>
+                        </div>
+                     </div>
+                   {% endfor %}
+                {% else %}
+                   <p>다가올 여행 일정이 없습니다.</p>
+                {% endif %}
+             </div>
+             <div class="schedule-section">
+                <div class="section-title">지난 여행 일정</div>
+                {% if past_plans %}
+                   {% for plan in past_plans %}
+                     <div class="schedule-item" data-plan-no="{{ plan.plan_no }}">
+                        <img src="{% if plan.plan_img %}{% static plan.plan_img %}{% else %}{% static 'images/default_trip.jpg' %}{% endif %}" alt="{{ plan.travel_title }}">
+                        <div class="schedule-info">
+                           <h5>{{ plan.travel_title }}</h5>
+                           <p>{{ plan.sdate }} ~ {{ plan.edate }}</p>
+                           <p>{{ plan.region }}</p>
+                        </div>
+                        <!-- 수정/삭제 버튼 (수정 모드에서만 표시) -->
+                        <div class="action-btns">
+                          <button type="button" class="btn btn-sm btn-primary edit-btn">수정</button>
+                          <button type="button" class="btn btn-sm btn-danger delete-btn">X</button>
+                        </div>
+                     </div>
+                   {% endfor %}
+                {% else %}
+                   <p>지난 여행 일정이 없습니다.</p>
+                {% endif %}
+             </div>
          </div>
          <!-- 회원정보 관리 탭 -->
          <div class="tab-pane fade" id="profile" role="tabpanel">
@@ -37,6 +154,62 @@
       <br>
       <a href="{% url 'main_page' %}" class="btn btn-secondary">홈으로</a>
    </div>
+
+   <!-- jQuery 및 Bootstrap JS -->
+   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/js/bootstrap.bundle.min.js"></script>
+   <script>
+      $(document).ready(function(){
+         var editMode = false;
+         // 수정 모드 토글
+         $("#toggleEditMode").click(function(){
+             editMode = !editMode;
+             if(editMode){
+                 $(this).text("수정 모드 비활성화").removeClass("btn-warning").addClass("btn-success");
+                 $(".schedule-item").addClass("editable");
+             } else {
+                 $(this).text("수정 모드 활성화").removeClass("btn-success").addClass("btn-warning");
+                 $(".schedule-item").removeClass("editable");
+             }
+         });
+         // 수정 버튼 클릭: 일정 수정 페이지로 이동 (/plan_schedule/?edit_plan=planNo)
+         $(".edit-btn").click(function(e){
+             e.stopPropagation();
+             var planNo = $(this).closest(".schedule-item").data("plan-no");
+             window.location.href = "/plan_schedule/?edit_plan=" + planNo;
+         });
+         // 삭제 버튼 클릭: 삭제 확인 후 AJAX 요청
+         $(".delete-btn").click(function(e){
+             e.stopPropagation();
+             var planItem = $(this).closest(".schedule-item");
+             var planNo = planItem.data("plan-no");
+             if(confirm("정말 삭제하시겠습니까?")){
+                 $.ajax({
+                     url: "/schedule/" + planNo + "/delete/",
+                     type: "POST",
+                     headers: { "X-CSRFToken": "{{ csrf_token }}" },
+                     success: function(response){
+                         if(response.status === "success"){
+                             alert(response.message);
+                             planItem.remove();
+                         } else {
+                             alert(response.message);
+                         }
+                     },
+                     error: function(xhr){
+                         alert("삭제 중 오류 발생: " + (xhr.responseJSON ? xhr.responseJSON.message : "오류"));
+                     }
+                 });
+             }
+         });
+         // 수정 모드 비활성 상태에서는 일정 클릭 시 상세 페이지로 이동
+         $(".schedule-item").click(function(){
+             if(!editMode){
+                 var planNo = $(this).data("plan-no");
+                 window.location.href = "/schedule/" + planNo + "/";
+             }
+         });
+      });
+   </script>
 </body>
 </html>
