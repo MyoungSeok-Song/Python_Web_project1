@@ -949,3 +949,43 @@ def comment_delete(request, comment_id):
         return JsonResponse({"status": "success", "message": "댓글이 삭제되었습니다."})
     else:
         return JsonResponse({"status": "error", "message": "POST 요청만 허용됩니다."}, status=405)
+
+@csrf_exempt
+def comment_update(request, comment_id):
+    """
+    댓글 수정 뷰:
+    - 로그인한 사용자가 자신의 댓글(comment_id)을 수정합니다.
+    - POST 요청으로 수정할 댓글 내용을 받아 업데이트합니다.
+    """
+    user_email = request.session.get("user_email")
+    if not user_email:
+        return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
+
+    try:
+        comment = Comment.objects.get(id=comment_id)
+    except Comment.DoesNotExist:
+        return JsonResponse({"status": "error", "message": "댓글을 찾을 수 없습니다."}, status=404)
+
+    # 댓글 작성자 확인
+    if comment.author.email != user_email:
+        return JsonResponse({"status": "error", "message": "수정 권한이 없습니다."}, status=403)
+
+    if request.method == "POST":
+        new_content = request.POST.get("content")
+        if not new_content:
+            return JsonResponse({"status": "error", "message": "수정할 내용을 입력해 주세요."}, status=400)
+        comment.content = new_content
+        comment.save()
+        return JsonResponse({
+            "status": "success",
+            "message": "댓글이 수정되었습니다.",
+            "comment": {
+                "id": comment.id,
+                "author": comment.author.name,
+                "content": comment.content,
+                "created_at": comment.created_at.strftime("%Y-%m-%d %H:%M")
+            }
+        })
+    else:
+        return JsonResponse({"status": "error", "message": "POST 요청만 허용됩니다."}, status=405)
+
