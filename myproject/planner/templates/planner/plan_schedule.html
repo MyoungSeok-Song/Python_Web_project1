@@ -102,17 +102,25 @@
   <div class="container calendar-header">
     <div class="row align-items-center">
       <div class="col-md-4">
-        <input type="text" id="travelTitle" class="form-control" placeholder="전체 여행 제목 입력">
+        <!-- 수정 모드이면 기존 travel_title 값을 미리 채워넣음 -->
+        <input type="text" id="travelTitle" class="form-control" placeholder="전체 여행 제목 입력" value="{{ travel_title|default:'' }}">
       </div>
       <div class="col-md-4">
-        <input type="date" id="globalStartDate" class="form-control">
-        <input type="date" id="globalEndDate" class="form-control mt-1">
+        <!-- 날짜 필드도 미리 채워넣기 (날짜 포맷이 YYYY-MM-DD라고 가정) -->
+        <input type="date" id="globalStartDate" class="form-control" value="{{ start_date|date:'Y-m-d' }}">
+        <input type="date" id="globalEndDate" class="form-control mt-1" value="{{ end_date|date:'Y-m-d' }}">
       </div>
       <div class="col-md-4 text-end">
         <button type="button" id="saveSchedule" class="btn btn-primary">일정 저장</button>
         <button type="button" id="closeSchedule" class="btn btn-secondary">닫기</button>
       </div>
     </div>
+    <!-- 수정 모드일 경우, hidden 필드로 edit_plan 값 전송 -->
+    {% if edit_plan %}
+      <input type="hidden" id="edit_plan" value="{{ edit_plan }}">
+      <!-- 수정 모드일 때 기존 itinerary 데이터도 JS에서 사용할 수 있도록 hidden에 JSON 문자열 전송 -->
+      <input type="hidden" id="itineraries_data" value='{{ itineraries|default:"{}" }}'>
+    {% endif %}
   </div>
 
   <!-- 메인 콘텐츠 영역: Flexbox 그리드 -->
@@ -232,6 +240,24 @@
       console.log("Document ready");
       var initialRecommended = JSON.parse('{{ recommended_json|escapejs }}');
       updateRecommendedList(initialRecommended);
+
+      // 만약 수정 모드라면, 기존 itinerary 데이터 불러오기
+      var editPlan = $("#edit_plan").val();
+      if(editPlan){
+          var prefillItineraries = $("#itineraries_data").val();
+          if(prefillItineraries){
+              itineraries = JSON.parse(prefillItineraries);
+              // 각 DAY 버튼을 생성
+              var days = Object.keys(itineraries).length;
+              $("#dayButtons").empty();
+              for (var i = 1; i <= days; i++) {
+                  $("#dayButtons").append(`<button type="button" class="btn btn-outline-secondary mb-2 day-btn" data-day="${i}">DAY ${i}</button>`);
+              }
+              currentDay = 1;
+              $(".day-btn").first().addClass("active");
+              updateItineraryDisplay();
+          }
+      }
 
       $("#globalStartDate, #globalEndDate").on("change", function(){
         var startDate = $("#globalStartDate").val();
@@ -372,6 +398,7 @@
         var startDate = $("#globalStartDate").val();
         var endDate = $("#globalEndDate").val();
         var destination = $("#destinationDisplay").text().trim();
+        var editPlan = $("#edit_plan").length ? $("#edit_plan").val() : null;
         if (!travelTitle) {
           alert("여행 제목을 입력해 주세요.");
           return;
@@ -389,7 +416,8 @@
           start_date: startDate,
           end_date: endDate,
           destination: destination,
-          itineraries: itineraries
+          itineraries: itineraries,
+          edit_plan: editPlan
         };
         $.ajax({
           url: "{% url 'save_schedule' %}",

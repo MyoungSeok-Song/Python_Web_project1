@@ -56,6 +56,7 @@ class PlannerDetail(models.Model):
     signup = models.ForeignKey(Signup, on_delete=models.CASCADE)
     title = models.ForeignKey(Tourlist, on_delete=models.CASCADE)
     wdate = models.CharField(max_length=200, null=True, blank=True)
+    actual_date = models.DateField(null=True, blank=True)  # 실제 날짜 (YYYY-MM-DD)
     memo = models.TextField(blank=True)
 
     def __str__(self):

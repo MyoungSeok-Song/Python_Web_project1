@@ -9,6 +9,7 @@ urlpatterns = [
     path('password_reset/', views.password_reset_view, name='password_reset'),
     path('my_page/', views.my_page_view, name='my_page'),
     path('my_schedule/', views.my_schedule_view, name='my_schedule'),
+    path('schedule/<int:plan_no>/delete/', views.schedule_delete_view, name='schedule_delete'),
     path('schedule/<int:plan_no>/', views.schedule_detail_view, name='schedule_detail'),
     path('update_profile/', views.update_profile_view, name='update_profile'),
     path('delete_profile/', views.delete_profile_view, name='delete_profile'),
