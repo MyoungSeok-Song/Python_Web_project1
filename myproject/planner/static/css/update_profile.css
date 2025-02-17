@@ -1,82 +1,50 @@
-/* 전체 페이지 스타일 */
-body {
+/* update_profile.css */
+
+/* update_profile.html의 최상위 래퍼에 적용 */
+.update-profile-wrapper {
     font-family: 'Arial', sans-serif;
     background-color: #f9f9f9;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    min-height: 100vh;
+    padding: 20px;
     margin: 0;
-}
+    background-color: #ffffff;
+    border: 1px solid #ddd;       /*(선택) 테두리 추가로 박스처럼 보이게 할 수도 있음 */
+    border-radius : 10px;
+  }
 
-/* 컨테이너 스타일 */
-.container {
-    max-width: 450px;
-    background: white;
-    padding: 40px;
-    border-radius: 10px;
-    box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.1);
-}
+  /* update-profile-wrapper 내부의 제목 스타일 */
+  .update-profile-wrapper h2 {
+      font-size: 24px;
+      font-weight: bold;
+      margin-bottom: 40px !important;  /* !important를 추가하여 다른 스타일보다 우선 적용 */
+      color: #333;
+  }
 
-/* 제목 스타일 */
-h2 {
-    text-align: center;
-    font-size: 24px;
-    font-weight: bold;
-    margin-bottom: 20px;
-    color: #333;
-}
-/* X 버튼 스타일 */
-.close-btn {
-    position: absolute;
-    top: 5px;
-    right: 10px;
-    font-size: 24px;
-    background: none;
-    border: none;
-    cursor: pointer;
-    color: black;
-    z-index: 1000;
-}
-
-.close-btn:hover {
-    color: red;
-}
-/* 입력 필드 공통 스타일 */
-.form-label { /* 이메일, 비밀번호 등... 레이블 */
+  /* 폼 레이블 스타일 */
+  .update-profile-wrapper .form-label {
     font-weight: bold;
     color: #333;
-}
+  }
 
-.form-control { /* 입력 받는 칸 */
+  /* 입력 필드 스타일 */
+  .update-profile-wrapper .form-control {
     border: none;
-    width: 100%;
     border-bottom: 1px solid #ccc;
     border-radius: 0;
     background-color: transparent;
-
     font-size: 0.95rem;
     color: #333;
     padding: 8px 0;
+    margin-bottom: 1rem;
+  }
 
-}
-
-.form-control:focus { /* 입력 하기 위해 마우스로 누르면 강조 되는 부분 */
+  .update-profile-wrapper .form-control:focus {
     border-bottom: 1px solid #007bff;
     outline: none;
     box-shadow: none;
-}
+  }
 
-/* 오류 메시지 스타일 */
-.error-message {
-    color: red;
-    font-size: 0.85rem;
-    margin-top: 5px;
-    display: none;
-}
-
-/* 회원가입 버튼 스타일 */
-.btn-primary {
+  /* 버튼 스타일 */
+  .update-profile-wrapper .btn-primary {
     width: 100%;
     padding: 12px;
     font-size: 18px;
@@ -85,16 +53,16 @@ h2 {
     border: none;
     border-radius: 5px;
     transition: background 0.3s ease-in-out;
-}
+  }
 
-.btn-primary:hover {
+  .update-profile-wrapper .btn-primary:hover {
     background: #0056b3;
-}
+  }
 
-/* 반응형 디자인 */
-@media (max-width: 500px) {
-    .container {
-        width: 90%;
-        padding: 30px;
-    }
-}
+  /* 오류 메시지 스타일 */
+  .update-profile-wrapper .error-message {
+    color: red;
+    font-size: 0.9rem;
+    display: none;
+    margin-top: 5px;
+  }
