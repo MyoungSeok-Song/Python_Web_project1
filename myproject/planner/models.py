@@ -85,3 +85,29 @@ class Comment(models.Model):
 
     def __str__(self):
         return f"Comment {self.id} by {self.author.email}"
+
+class Post(models.Model):
+    id = models.AutoField(primary_key=True)
+    author = models.ForeignKey(Signup, on_delete=models.CASCADE)
+    image = models.ImageField(upload_to='posts/%Y/%m/%d/', blank=True, null=True)
+    caption = models.TextField(blank=True)
+    created_at = models.DateTimeField(default=timezone.now)
+    updated_at = models.DateTimeField(auto_now=True)
+    # 좋아요 기능: 여러 회원이 좋아요를 누를 수 있음
+    likes = models.ManyToManyField(Signup, related_name='liked_posts', blank=True)
+
+    def __str__(self):
+        return f"Post {self.id} by {self.author.email}"
+
+class Feed(models.Model):
+    id = models.AutoField(primary_key=True)
+    author = models.ForeignKey('Signup', on_delete=models.CASCADE)
+    image = models.ImageField(upload_to='feed_images/', null=True, blank=True)  # Pillow 필요
+    content = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    likes = models.ManyToManyField('Signup', related_name='liked_feeds', blank=True)
+    bookmarks = models.ManyToManyField('Signup', related_name='bookmarked_feeds', blank=True)
+
+    def __str__(self):
+        return f"{self.author.name} - {self.created_at.strftime('%Y-%m-%d %H:%M')}"
