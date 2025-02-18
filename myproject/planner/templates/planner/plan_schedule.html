@@ -121,12 +121,7 @@
                 <h4>추천 장소</h4>
                 <span class="region-label">{{ destination|default:"여행지 선택 안됨" }}</span>
               </div>
-              <div class="mb-3">
-                <div class="input-group">
-                  <input type="text" id="recommendSearch" class="form-control" placeholder="추천 장소 검색">
-                  <button type="button" id="recommendSearchBtn" class="btn btn-secondary">검색</button>
-                </div>
-              </div>
+              <!-- 검색 영역 제거: 추천 장소는 검색 없이 목록만 보여짐 -->
               <div id="recommendedList"></div>
               <div class="pagination-controls" id="recPaginationControls"></div>
             </div>
@@ -202,7 +197,7 @@
     function updateRecommendedListPaginated(data) {
       var totalItems = data.length;
       var totalPages = Math.ceil(totalItems / recItemsPerPage);
-      recCurrentPage = Math.min(recCurrentPage, totalPages);
+      recCurrentPage = Math.min(recCurrentPage, totalPages) || 1;
       var startIndex = (recCurrentPage - 1) * recItemsPerPage;
       var endIndex = startIndex + recItemsPerPage;
       var pageData = data.slice(startIndex, endIndex);
@@ -236,7 +231,8 @@
       var items = itineraries[currentDay] || [];
       var totalItems = items.length;
       var totalPages = Math.ceil(totalItems / itinItemsPerPage);
-      itinCurrentPage = Math.min(itinCurrentPage, totalPages);
+      if(totalPages < 1) { totalPages = 1; itinCurrentPage = 1; }
+      else { itinCurrentPage = Math.min(itinCurrentPage, totalPages); }
       var startIndex = (itinCurrentPage - 1) * itinItemsPerPage;
       var endIndex = startIndex + itinItemsPerPage;
       var pageData = items.slice(startIndex, endIndex);
@@ -372,7 +368,7 @@
         var placeData = JSON.parse(placeDataStr);
         placeData.memo = "";
         itineraries[currentDay].push(placeData);
-        // 현재 itinCurrentPage 유지
+        // 현재 itinCurrentPage를 유지하여 업데이트
         updateItineraryDisplayPaginated();
       });
 
@@ -479,7 +475,6 @@
         var travelTitle = $("#travelTitle").val().trim();
         var startDate = $("#globalStartDate").val();
         var endDate = $("#globalEndDate").val();
-        // 기본적으로 region-label 또는 mapHeading의 텍스트 사용
         var destination = $(".region-label").first().text().trim() || $("#mapHeading").text().trim();
         var editPlan = $("#edit_plan").length ? $("#edit_plan").val() : null;
         if(!travelTitle){
