@@ -42,29 +42,119 @@
       font-size: 0.9rem;
     }
   </style>
+  <!-- 챗봇 스타일 -->
+  <style>
+    .chatbot-container {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      width: 300px;
+      border-radius: 10px;
+      background: #fff;
+      box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);
+      overflow: hidden;
+      border: 1px solid #ddd;
+    }
+
+    .chatbot-header {
+      background: #007bff;
+      color: white;
+      padding: 10px;
+      font-size: 16px;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    .chatbot-body {
+      max-height: 300px;
+      overflow-y: auto;
+      padding: 10px;
+    }
+
+    .chatbot-footer {
+      display: flex;
+      border-top: 1px solid #ddd;
+    }
+
+    .chat-input {
+      flex: 1;
+      padding: 10px;
+      border: none;
+      outline: none;
+    }
+
+    .chat-send-btn {
+      background: #007bff;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      cursor: pointer;
+    }
+
+    .bot-message, .user-message {
+      padding: 8px;
+      margin: 5px;
+      border-radius: 8px;
+    }
+
+    .bot-message {
+      background: #f1f1f1;
+      align-self: flex-start;
+    }
+
+    .user-message {
+      background: #007bff;
+      color: white;
+      align-self: flex-end;
+    }
+  </style>
 </head>
 <body>
   <!-- 네비게이션 (고정된 너비로 중앙 정렬) -->
-  <nav class="navbar navbar-expand-lg navbar-light bg-light fixed-nav">
-    <div class="container fixed-container">
+  <nav class="navbar navbar-expand-lg navbar-light bg-light">
+    <div class="container">
+      <!-- 브랜드(왼쪽) -->
       <a class="navbar-brand" href="{% url 'main_page' %}">여행 플래너</a>
+
+      <!-- 토글 버튼(화면이 작아지면 나타남) -->
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-              data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+              data-bs-target="#navbarNav" aria-controls="navbarNav"
+              aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
+
+      <!-- 실제 메뉴 (오른쪽) -->
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
-          <li class="nav-item"><a class="nav-link" href="#">이용방법</a></li>
-          <li class="nav-item"><a class="nav-link" href="{% url 'board_list' %}">게시판</a></li>
+          <li class="nav-item">
+            <a class="nav-link" href="#">이용방법</a>
+          </li>
+          <li class="nav-item">
+            {% if request.session.user_email %}
+              <a class="nav-link" href="{% url 'feed_main' %}">커뮤니티</a>
+            {% else %}
+              <a class="nav-link" href="#" onclick="alert('로그인 후 이용해 주세요.'); return false;">커뮤니티</a>
+            {% endif %}
+          </li>
           {% if request.session.user_email %}
-            <li class="nav-item"><a class="nav-link" href="{% url 'my_page' %}">마이페이지</a></li>
-            <li class="nav-item"><a class="nav-link" href="{% url 'logout' %}">로그아웃</a></li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
+                 data-bs-toggle="dropdown" aria-expanded="false">
+                {{ request.session.user_name }}님
+              </a>
+              <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                <li><a class="dropdown-item" href="{% url 'my_page' %}">마이페이지</a></li>
+                <li><a class="dropdown-item" href="{% url 'logout' %}">로그아웃</a></li>
+              </ul>
+            </li>
           {% else %}
-            <li class="nav-item"><a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#loginModal">로그인</a></li>
+            <li class="nav-item">
+              <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#loginModal">로그인</a>
+            </li>
           {% endif %}
         </ul>
       </div>
-    </div>
+    </div> <!-- /.container -->
   </nav>
 
   <!-- 상단 바 (고정) -->
@@ -119,9 +209,9 @@
             <div class="recommended-places p-3 mb-3">
               <div class="recommended-header">
                 <h4>추천 장소</h4>
-                <span class="region-label">{{ destination|default:"여행지 선택 안됨" }}</span>
+                <span id="destinationDisplay" class="region-label">{{ destination|default:"여행지 선택 안됨" }}</span>
               </div>
-              <!-- 검색 영역 제거: 추천 장소는 검색 없이 목록만 보여짐 -->
+              <!-- 추천 장소 목록 -->
               <div id="recommendedList"></div>
               <div class="pagination-controls" id="recPaginationControls"></div>
             </div>
@@ -152,6 +242,50 @@
       </div>
     </div>
   </div>
+  <!-- 로그인 모달 -->
+  <div class="modal fade" id="loginModal" tabindex="-1" aria-labelledby="loginModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <form id="loginForm">
+          <div class="modal-header">
+            <h3 class="modal-title text-center" id="loginModalLabel" style="width: 100%;">로그인</h3>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="닫기"></button>
+          </div>
+          <div class="modal-body">
+            <div class="mb-3">
+              <label for="loginEmail" class="form-label">이메일</label>
+              <input type="email" class="form-control" id="loginEmail" name="email" required>
+              <div id="loginEmailError" class="error-message">
+                올바른 이메일 형식이 아닙니다. 다시 입력해 주세요.
+              </div>
+            </div>
+            <div class="mb-3">
+              <label for="loginPassword" class="form-label">비밀번호</label>
+              <input type="password" class="form-control" id="loginPassword" name="password" required>
+            </div>
+          </div>
+          <div class="modal-footer d-flex flex-column">
+            <button type="submit" class="btn btn-primary w-100"><b>로그인</b></button>
+            <div class="mt-2">
+              <a href="{% url 'signup' %}">회원가입</a> |
+              <a href="{% url 'password_reset' %}">비밀번호 찾기</a>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <!-- 챗봇 UI -->
+  <div class="chatbot-container">
+    <div class="chatbot-header">💬 여행 챗봇</div>
+    <div class="chatbot-body" id="chatbotBody">
+      <p class="bot-message">안녕하세요! 여행 관련 질문을 해주세요 😊</p>
+    </div>
+    <div class="chatbot-footer">
+      <input type="text" id="chatInput" class="chat-input" placeholder="질문을 입력하세요..."/>
+      <button id="chatSendBtn" class="chat-send-btn">전송</button>
+    </div>
+  </div>
 
   <!-- jQuery 및 Bootstrap JS -->
   <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
@@ -163,12 +297,14 @@
     var itineraries = {};
     var map;
     var markers = [];
+    var infoWindows = []; // 인포윈도우 배열 추가
     // 페이징 변수 (추천 장소 6개, 선택된 일정 5개씩)
     var recCurrentPage = 1;
     var recItemsPerPage = 6;
     var itinCurrentPage = 1;
     var itinItemsPerPage = 5;
 
+    // map 초기 설정
     function initMap() {
       var mapCenter = {
         lat: parseFloat("{{ map_center.lat }}"),
@@ -179,35 +315,89 @@
         center: mapCenter
       });
       var recommendedPlaces = JSON.parse('{{ recommended_json|escapejs }}');
-      recommendedPlaces.forEach(function(place) {
-        var lat = parseFloat(place.lat);
-        var lng = parseFloat(place.lng);
-        if (!isNaN(lat) && !isNaN(lng)) {
-          var marker = new google.maps.Marker({
-            position: {lat: lat, lng: lng},
-            map: map,
-            title: place.name
-          });
-          markers.push(marker);
-        }
+      // 필터링: firstimage2가 없는 장소는 제거
+      recommendedPlaces = recommendedPlaces.filter(function(place) {
+        return place.firstimage2;
       });
+      addMarkers(recommendedPlaces);
     }
     window.initMap = initMap;
 
+    var initialRecommended = JSON.parse('{{ recommended_json|escapejs }}');
+
+    // 마커 추가(인포윈도우)
+    function addMarkers(places) {
+      places.forEach(function(place) {
+        if (!place.firstimage2) return;
+
+        var lat = parseFloat(place.lat);
+        var lng = parseFloat(place.lng);
+        if (!isNaN(lat) && !isNaN(lng)) {
+          var rawName = place.name;
+          var displayName = rawName.replace("서울특별시", "").trim();
+          if (!displayName) {
+            displayName = rawName;
+          }
+          var marker = new google.maps.Marker({
+            position: {lat: lat, lng: lng},
+            map: map,
+            title: displayName
+          });
+          markers.push(marker);
+
+          var imageUrl = place.firstimage2;
+          var contentString = `
+            <div style="max-width: 250px;">
+              <strong>${displayName}</strong><br>
+              <img src="${imageUrl}" alt="${rawName}" style="width: 100%; height: auto; margin-top: 5px;"><br>
+              <span>${place.address || "주소 정보 없음"}</span><br>
+              <button class="btn btn-sm btn-success add-place" data-place='${JSON.stringify(place)}'>추가하기</button>
+            </div>
+          `;
+          var infoWindow = new google.maps.InfoWindow({
+            content: contentString
+          });
+          infoWindows.push(infoWindow);
+
+          marker.addListener("click", function() {
+            infoWindows.forEach(function(win) { win.close(); });
+            infoWindow.open(map, marker);
+          });
+        }
+      });
+    }
+
+    // 기존 마커와 인포윈도우 제거
+    function clearMarkers() {
+      markers.forEach(function(marker) {
+        marker.setMap(null);
+      });
+      markers = [];
+      infoWindows = [];
+    }
+
     function updateRecommendedListPaginated(data) {
-      var totalItems = data.length;
+      var filteredData = data.filter(function(place) {
+        return place.firstimage2;
+      });
+      var totalItems = filteredData.length;
       var totalPages = Math.ceil(totalItems / recItemsPerPage);
       recCurrentPage = Math.min(recCurrentPage, totalPages) || 1;
       var startIndex = (recCurrentPage - 1) * recItemsPerPage;
       var endIndex = startIndex + recItemsPerPage;
-      var pageData = data.slice(startIndex, endIndex);
+      var pageData = filteredData.slice(startIndex, endIndex);
       var recommendedHTML = "";
       if (pageData && pageData.length > 0) {
         pageData.forEach(function(place) {
-          var imageUrl = place.firstimage2 || "https://fakeimg.pl/200x200/?retina=1&text=No+Image";
+          var rawName = place.name;
+          var displayName = rawName.replace("서울특별시", "").trim();
+          if (!displayName) {
+            displayName = rawName;
+          }
+          var imageUrl = place.firstimage2;
           recommendedHTML += `<div class="recommended-item d-flex align-items-center border-bottom py-1">
-                                <img src="${imageUrl}" alt="${place.name}" class="recommended-image" style="width:50px;height:50px;object-fit:cover;border-radius:5px;margin-right:10px;">
-                                <span>${place.name}</span>
+                                <img src="${imageUrl}" alt="${rawName}" class="recommended-image" style="width:50px;height:50px;object-fit:cover;border-radius:5px;margin-right:10px;cursor:pointer;">
+                                <span>${rawName}</span>
                                 <button type="button" class="btn btn-sm btn-success add-place" data-place='${JSON.stringify(place)}'>+</button>
                               </div>`;
         });
@@ -240,6 +430,12 @@
         $("#selectedItinerary").append("<p>일정이 없습니다.</p>");
       } else {
         pageData.forEach(function(item, index) {
+
+          var imageHtml = "";
+          if(item.firstimage2) {
+            imageHtml = `<img src="${item.firstimage2}" alt="${item.name}" class="selected-image" style="width:50px; height:50px; object-fit:cover; border-radius:5px; cursor:pointer; margin-right:10px;">`;
+          }
+
           var html = `<div class="itinerary-item" data-index="${index}">
                         <div class="itinerary-name"><span>${item.name}</span></div>
                         <div class="itinerary-memo-row">
@@ -270,8 +466,16 @@
 
     $(document).ready(function(){
       console.log("Document ready");
-      var initialRecommended = JSON.parse('{{ recommended_json|escapejs }}');
+      // 초기 추천 데이터(서울의 추천 장소)로 목록 표시
       updateRecommendedList(initialRecommended);
+
+      // 추천 장소 이미지 클릭 이벤트: 이미지 클릭 시 네이버 지도 검색 결과 팝업창 열기
+      $(document).on("click", ".recommended-image", function(){
+        var placeName = $(this).siblings("span").text();
+        var processedPlaceName = placeName.replace(/\(.*?\)/g, "").trim();
+        var searchUrl = "https://map.naver.com/v5/search/" + encodeURIComponent(processedPlaceName);
+        window.open(searchUrl, "naverMapPopup", "width=800,height=600");
+      });
 
       // 페이징 버튼 이벤트 for 추천 장소
       $(document).on("click", ".rec-prev", function(){
@@ -281,7 +485,7 @@
         }
       });
       $(document).on("click", ".rec-next", function(){
-        if(recCurrentPage < Math.ceil(initialRecommended.length / recItemsPerPage)){
+        if(recCurrentPage < Math.ceil(initialRecommended.filter(function(p){ return p.firstimage2; }).length / recItemsPerPage)){
           recCurrentPage++;
           updateRecommendedListPaginated(initialRecommended);
         }
@@ -368,8 +572,15 @@
         var placeData = JSON.parse(placeDataStr);
         placeData.memo = "";
         itineraries[currentDay].push(placeData);
-        // 현재 itinCurrentPage를 유지하여 업데이트
         updateItineraryDisplayPaginated();
+      });
+
+      // 선택된 일정의 이미지 클릭 이벤트
+      $(document).on("click", ".selected-image", function(){
+        var placeName = $(this).siblings("span").text();
+        var processedPlaceName = placeName.replace(/\(.*?\)/g, "").trim();
+        var searchUrl = "https://map.naver.com/v5/search/" + encodeURIComponent(processedPlaceName);
+        window.open(searchUrl, "naverMapPopup", "width=800,height=600");
       });
 
       // 일정 항목 삭제
@@ -388,52 +599,16 @@
         }
       });
 
-      // 지도 검색
+      // 지도 검색 (AJAX 및 마커/인포윈도우 업데이트)
       $("#travelSearchBtn").click(function(event){
         event.preventDefault();
-        var searchValue = $("#travelSearchInput").val().trim();
+        var searchValue = $("#travelSearchInput").val().replace(/\s+/g, "");
         if(searchValue){
-          $.ajax({
-            url: "{% url 'update_destination' %}",
-            type: "GET",
-            data: { destination: searchValue },
-            success: function(response){
-              $("#destinationDisplay").text(response.destination);
-              $("#mapHeading").text(response.destination);
-              if(response.map_center){
-                var newCenter = new google.maps.LatLng(response.map_center.lat, response.map_center.lng);
-                map.setCenter(newCenter);
-              }
-              var recommendedHTML = "";
-              if(response.recommended_places.length > 0){
-                response.recommended_places.forEach(function(place){
-                  var imageUrl = place.firstimage2 || "https://fakeimg.pl/200x200/?retina=1&text=No+Image";
-                  recommendedHTML += `
-                    <div class="recommended-item d-flex align-items-center border-bottom py-1">
-                      <img src="${imageUrl}" alt="${place.name}" class="recommended-image" style="width:50px;height:50px;object-fit:cover;border-radius:5px;margin-right:10px;">
-                      <span>${place.name}</span>
-                      <button type="button" class="btn btn-sm btn-success add-place" data-place='${JSON.stringify(place)}'>+</button>
-                    </div>`;
-                });
-              } else {
-                recommendedHTML = "<p>추천 장소 정보가 없습니다.</p>";
-              }
-              $("#recommendedList").html(recommendedHTML);
-            },
-            error: function(xhr){
-              alert("오류: " + xhr.responseJSON.message);
-            }
-          });
-        } else {
-          alert("검색어를 입력해 주세요.");
-        }
-      });
+          $("#recommendedList").empty();
+          $("#recPaginationControls").empty();
+          clearMarkers();
+          recCurrentPage = 1;
 
-      // 추천 장소 검색 버튼
-      $("#recommendSearchBtn").click(function(event){
-        event.preventDefault();
-        var searchValue = $("#recommendSearch").val().trim();
-        if(searchValue){
           $.ajax({
             url: "{% url 'update_destination' %}",
             type: "GET",
@@ -445,24 +620,19 @@
                 var newCenter = new google.maps.LatLng(response.map_center.lat, response.map_center.lng);
                 map.setCenter(newCenter);
               }
-              var recommendedHTML = "";
-              if(response.recommended_places.length > 0){
-                response.recommended_places.forEach(function(place){
-                  var imageUrl = place.firstimage2 || "https://fakeimg.pl/200x200/?retina=1&text=No+Image";
-                  recommendedHTML += `
-                    <div class="recommended-item d-flex align-items-center border-bottom py-1">
-                      <img src="${imageUrl}" alt="${place.name}" class="recommended-image" style="width:50px;height:50px;object-fit:cover;border-radius:5px;margin-right:10px;">
-                      <span>${place.name}</span>
-                      <button type="button" class="btn btn-sm btn-success add-place" data-place='${JSON.stringify(place)}'>+</button>
-                    </div>`;
-                });
-              } else {
-                recommendedHTML = "<p>추천 장소 정보가 없습니다.</p>";
-              }
-              $("#recommendedList").html(recommendedHTML);
+              clearMarkers();
+              addMarkers(response.recommended_places);
+              initialRecommended = response.recommended_places;
+              updateRecommendedListPaginated(initialRecommended);
             },
             error: function(xhr){
-              alert("오류: " + xhr.responseJSON.message);
+              var errorMsg = "오류가 발생했습니다.";
+              if (xhr.responseJSON && xhr.responseJSON.message) {
+                errorMsg = xhr.responseJSON.message;
+              } else if (xhr.responseText) {
+                errorMsg = xhr.responseText;
+              }
+              alert("오류 발생-> 검색 결과가 없습니다!");
             }
           });
         } else {
@@ -516,7 +686,91 @@
       // 닫기 버튼
       $("#closeSchedule").click(function(){
         if(confirm("정말 닫으시겠습니까? 변경사항은 저장되지 않습니다.")){
-          location.reload();
+          window.location.href = "{% url 'main_page' %}";
+        }
+      });
+    });
+    document.getElementById("chatSendBtn").addEventListener("click", sendMessage);
+    document.getElementById("chatInput").addEventListener("keypress", function (event) {
+      if (event.key === "Enter") sendMessage();
+    });
+
+    function sendMessage() {
+      let userInput = document.getElementById("chatInput").value.trim();
+      if (userInput === "") return;
+
+      let chatBody = document.getElementById("chatbotBody");
+
+      // 사용자 메시지 추가
+      let userMessage = `<p class="user-message">${userInput}</p>`;
+      chatBody.innerHTML += userMessage;
+      document.getElementById("chatInput").value = "";
+      chatBody.scrollTop = chatBody.scrollHeight;
+
+      // OpenAI API 요청
+      fetch("/chatbot/", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({message: userInput})
+      })
+              .then(response => response.json())
+              .then(data => {
+                let botMessage = `<p class="bot-message">${data.reply}</p>`;
+                chatBody.innerHTML += botMessage;
+                chatBody.scrollTop = chatBody.scrollHeight;
+              })
+              .catch(error => {
+                console.error("Error:", error);
+                chatBody.innerHTML += `<p class="bot-message">⚠️ 오류가 발생했습니다.</p>`;
+              });
+    }
+
+    $(document).ready(function(){
+      var emailRegex = /^[\w\.-]+@[\w\.-]+\.\w+$/;
+
+      // 실시간 이메일 검증
+      $("#loginEmail").on("blur keyup", function(){
+        var email = $(this).val();
+        if (!emailRegex.test(email)) {
+          $("#loginEmailError").show();
+        } else {
+          $("#loginEmailError").hide();
+        }
+      });
+
+      // 로그인 폼
+      $("#loginForm").submit(function(event){
+        event.preventDefault();
+        var email = $("#loginEmail").val();
+        if (!emailRegex.test(email)) {
+          $("#loginEmailError").show();
+          return false;
+        }
+        var formData = $(this).serialize();
+        $.ajax({
+          url: "{% url 'login' %}",
+          type: "POST",
+          data: formData,
+          headers: { "X-CSRFToken": "{{ csrf_token }}" },
+          success: function(response){
+            if(response.status === "success"){
+              alert("로그인 성공: " + response.user_name);
+              location.reload();
+            }
+          },
+          error: function(xhr, status, error){
+            alert("로그인 실패: " + xhr.responseJSON.message);
+          }
+        });
+      });
+
+      // 여행지 검색
+      $("#travelSearchBtn").click(function(){
+        var searchValue = $("#travelSearchInput").val().trim();
+        if(searchValue) {
+          window.location.href = "{% url 'plan_schedule' %}?destination=" + encodeURIComponent(searchValue);
+        } else {
+          alert("검색어를 입력해 주세요.");
         }
       });
     });

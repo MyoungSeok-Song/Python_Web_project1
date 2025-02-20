@@ -16,16 +16,19 @@ urlpatterns = [
     path('plan_schedule/', views.plan_schedule_view, name='plan_schedule'),
     path('save_schedule/', views.save_schedule_view, name='save_schedule'),
     path('update_destination/', views.update_destination_view, name='update_destination'),
-    # 게시판 관련 URL
-    path('board/', views.board_list, name='board_list'),
-    path('board/create/', views.board_create, name='board_create'),
-    path('board/<int:board_id>/', views.board_detail, name='board_detail'),
-    path('board/<int:board_id>/update/', views.board_update, name='board_update'),
-    path('board/<int:board_id>/delete/', views.board_delete, name='board_delete'),
-    # 댓글 관련 URL
-    path('board/<int:board_id>/comment/create/', views.comment_create, name='comment_create'),
-    path('comment/<int:comment_id>/delete/', views.comment_delete, name='comment_delete'),
-    path('comment/<int:comment_id>/update/', views.comment_update, name='comment_update'),
+    path("chatbot/", views.chatbot, name="chatbot"),
+    # 피드 관련 URL
+    path('feed/', views.feed_main, name='feed_main'),
+    path('feed/upload', views.upload_feed, name='upload_feed'),
+    path('feed/reply', views.upload_reply, name='upload_reply'),
+    path('feed/like', views.toggle_like, name='toggle_like'),
+    path('feed/bookmark', views.toggle_bookmark, name='toggle_bookmark'),
+    path('feed/detail/<int:feed_id>/', views.feed_detail_modal, name='feed_detail_modal'),
 
-    path('search/', views.search_view, name='search'),
+    # 댓글 답글 기능을 위한 URL 패턴 등록
+    path('feed/comment_reply/<int:parent_id>/', views.comment_reply, name='comment_reply'),
+
+    # 댓글 수정/삭제 URL도 필요하면 추가
+    path('feed/comment_update/<int:comment_id>/', views.comment_update, name='comment_update'),
+    path('feed/comment_delete/<int:comment_id>/', views.comment_delete, name='comment_delete'),
 ]

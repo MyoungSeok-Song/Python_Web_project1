@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 from pathlib import Path
+import os
 from django.core.mail import get_connection, send_mail
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -26,7 +27,7 @@ SECRET_KEY = "django-insecure-6!9isa*x60-x3hagcf_u_4-mai=1q2$z&ra30kie#vw*b-u^+l
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -39,6 +40,7 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     'planner',
+    'rest_framework',
 ]
 
 MIDDLEWARE = [
@@ -128,6 +130,10 @@ STATICFILES_DIRS = [
     BASE_DIR / "static",  # 프로젝트 루트에 있는 static 폴더
 ]
 
+# BASE_DIR이 이미 설정되어 있다고 가정합니다.
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
@@ -140,3 +146,9 @@ EMAIL_USE_SSL = True
 EMAIL_HOST_USER = 'joyfulkh2230@naver.com'
 EMAIL_HOST_PASSWORD = 'audtjr'
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
+
+from dotenv import load_dotenv
+
+load_dotenv()
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")

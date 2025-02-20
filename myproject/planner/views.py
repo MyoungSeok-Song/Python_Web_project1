@@ -1,19 +1,18 @@
-import json
-import re
-import random
-import string
-import requests  # 실제 API 호출 시 사용
+import json, os, re, random, string, logging, openai, requests
+from uuid import uuid4
 from datetime import datetime, timedelta  # 추가: 날짜 계산을 위해
 from django.shortcuts import render, redirect, get_object_or_404
 from django.utils import timezone
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponseNotAllowed
+from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt, csrf_protect
 from django.core.paginator import Paginator
-from .models import Signup, Planner, Tourlist, PlannerDetail, Board, Comment
+from .models import Signup, Planner, Tourlist, PlannerDetail, Feed, Reply, Like, Bookmark
+from django.contrib.auth import get_user_model
 from django.core.mail import send_mail  # 실제 메일 전송 시 사용 (설정 필요)
 from django.contrib.auth.hashers import make_password, check_password  # 해시 처리를 위한 함수
 from django.contrib import messages
-
+User = get_user_model()
 
 def main_page(request):
     regions = [
@@ -388,11 +387,10 @@ def delete_profile_view(request):
     else:
         return render(request, 'planner/delete_profile.html', {'user': user})
 
-
-# API 키들 (환경변수나 settings에서 불러오는 것이 좋습니다)
-GOOGLE_MAPS_API_KEY = "AIzaSyCrrpnBOa4XrAStl7Uw3AEmWcT2Q-iPJNI"
-KTO_API_KEY = "dNeku9S%2F21ZCjP5yrP3nKwrtnJUDORoRqP5quqd7TiiqN8%2B8jsSdT%2BMFp6I40J30euRBeJmDzJ1Qik74yqWH%2BQ%3D%3D"
-
+# Google Maps API
+GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+# 한국관광공사 API
+KTO_API_KEY = os.getenv("KTO_API_KEY")
 
 @csrf_protect
 def plan_schedule_view(request):
@@ -449,12 +447,13 @@ def plan_schedule_view(request):
                 edate=end_date
             )
 
+        # 시작일을 datetime 객체로 변환 (형식: YYYY-MM-DD)
         try:
             start_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
         except ValueError:
             return JsonResponse({"status": "error", "message": "시작일 형식이 올바르지 않습니다."}, status=400)
 
-        # 각 DAY별 PlannerDetail 생성
+        # 각 DAY의 itinerary 항목에 대해 PlannerDetail 레코드 생성
         for day, items in itineraries.items():
             try:
                 day_int = int(day)
@@ -462,6 +461,7 @@ def plan_schedule_view(request):
                 continue
             calculated_date = start_date_obj + timedelta(days=day_int - 1)
             wdate_str = calculated_date.strftime("%Y-%m-%d")
+
             for index, item in enumerate(items, start=1):
                 tour_title = item.get("name")
                 if not tour_title:
@@ -479,7 +479,6 @@ def plan_schedule_view(request):
                         ping=0,
                     )
                 memo_value = item.get("memo", "")
-                # plan_name은 전체 여행 제목만 저장 (수정 시 prefill 용)
                 PlannerDetail.objects.create(
                     plan_name=travel_title,
                     planner=planner,
@@ -540,6 +539,47 @@ def plan_schedule_view(request):
                             "lat": place["geometry"]["location"]["lat"],
                             "lng": place["geometry"]["location"]["lng"],
                         })
+                api_url = "http://apis.data.go.kr/B551011/KorService1/searchKeyword1"
+                params = {
+                    "serviceKey": KTO_API_KEY,
+                    "keyword": dest,
+                    "numOfRows": 100,
+                    "pageNo": 1,
+                    "MobileOS": "ETC",
+                    "MobileApp": "AppTest",
+                    "_type": "json"
+                }
+                try:
+                    ktour_response = requests.get(api_url, params=params)
+                    ktour_response.raise_for_status()  # HTTP 오류 시 예외 발생
+                    ktour_places = ktour_response.json()
+                    # 디버깅: 서버 콘솔에 API 응답 출력
+                    print("KTO API 응답:", json.dumps(ktour_places, indent=2, ensure_ascii=False))
+                    items = ktour_places.get("response", {}).get("body", {}).get("items", {}).get("item", [])
+
+                    # items가 딕셔너리인 경우 리스트로 변환
+                    if isinstance(items, dict):
+                        items = [items]
+
+                    for place in items:
+                        ct = place.get("contenttypeid", "")
+                        if ct not in ["12", "14"]:
+                            continue  # contentTypeId가 12나 14가 아니면 건너뜁니다.
+                        firstimage2 = place.get("firstimage2")
+                        if not firstimage2:
+                            continue
+                        recommended_places.append({
+                            "name": place.get("title", ""),
+                            "address": place.get("addr1", ""),
+                            "description": place.get("contenttypeid", "설명 없음"),
+                            "firstimage2": place.get("firstimage2", "https://via.placeholder.com/200?text=No+Image"),
+                            "description": ct,
+                            "lat": place.get("mapy", ""),
+                            "lng": place.get("mapx", ""),
+                            "source": "kto"
+                        })
+                except requests.exceptions.RequestException as e:
+                    print(f"한국관광공사 API 요청 중 오류 발생: {e}")
             if search_lat is None or search_lng is None:
                 map_center = {"lat": 36.5, "lng": 127.5}
             else:
@@ -558,11 +598,12 @@ def plan_schedule_view(request):
             }
             return render(request, "planner/plan_schedule.html", context)
         else:
-            # 일반 GET 요청: 추천 로직 그대로 수행
             destination = request.GET.get("destination", "")
             recommended_places = []
             search_lat, search_lng = None, None
+
             if destination:
+                # 1. Google Places API - Text Search
                 google_url = f"https://maps.googleapis.com/maps/api/place/textsearch/json?query={destination}&language=ko&key={GOOGLE_MAPS_API_KEY}"
                 google_response = requests.get(google_url)
                 google_places = google_response.json()
@@ -578,32 +619,62 @@ def plan_schedule_view(request):
                             "lat": place["geometry"]["location"]["lat"],
                             "lng": place["geometry"]["location"]["lng"],
                         })
-                if search_lat and search_lng:
-                    nearby_url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?location={search_lat},{search_lng}&radius=2000&language=ko&key={GOOGLE_MAPS_API_KEY}"
-                    nearby_response = requests.get(nearby_url)
-                    nearby_places = nearby_response.json()
-                    for place in nearby_places.get("results", []):
+                # 2. Google Places API - Nearby Search
+                # if search_lat and search_lng:
+                #     nearby_url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?location={search_lat},{search_lng}&radius=2000&language=ko&key={GOOGLE_MAPS_API_KEY}"
+                #     nearby_response = requests.get(nearby_url)
+                #     nearby_places = nearby_response.json()
+                #     for place in nearby_places.get("results", []):
+                #         recommended_places.append({
+                #             "name": place["name"],
+                #             "address": place.get("vicinity", ""),
+                #             "description": place.get("types", []),
+                #             "lat": place["geometry"]["location"]["lat"],
+                #             "lng": place["geometry"]["location"]["lng"],
+                #         })
+                # 3. 한국관광공사 API
+                api_url = "http://apis.data.go.kr/B551011/KorService1/searchKeyword1"
+                params = {
+                    "serviceKey": KTO_API_KEY,
+                    "keyword": destination,
+                    "numOfRows": 100,
+                    "pageNo": 1,
+                    "MobileOS": "ETC",
+                    "MobileApp": "AppTest",
+                    "_type": "json"
+                }
+                try:
+                    ktour_response = requests.get(api_url, params=params)
+                    ktour_response.raise_for_status()  # HTTP 오류 시 예외 발생
+                    ktour_places = ktour_response.json()
+                    # 디버깅: 서버 콘솔에 API 응답 출력
+                    print("KTO API 응답:", json.dumps(ktour_places, indent=2, ensure_ascii=False))
+                    items = ktour_places.get("response", {}).get("body", {}).get("items", {}).get("item", [])
+
+                    # items가 딕셔너리인 경우 리스트로 변환
+                    if isinstance(items, dict):
+                        items = [items]
+
+                    for place in items:
+                        ct = place.get("contenttypeid", "")
+                        if ct not in ["12", "14"]:
+                            continue  # contentTypeId가 12나 14가 아니면 건너뜁니다.
+                        firstimage2 = place.get("firstimage2")
+                        if not firstimage2:
+                            continue
                         recommended_places.append({
-                            "name": place["name"],
-                            "address": place.get("vicinity", ""),
-                            "description": place.get("types", []),
-                            "lat": place["geometry"]["location"]["lat"],
-                            "lng": place["geometry"]["location"]["lng"],
+                            "name": place.get("title", ""),
+                            "address": place.get("addr1", ""),
+                            "description": place.get("contenttypeid", "설명 없음"),
+                            "firstimage2": place.get("firstimage2", "https://via.placeholder.com/200?text=No+Image"),
+                            "description": ct,
+                            "lat": place.get("mapy", ""),
+                            "lng": place.get("mapx", ""),
+                            "source": "kto"
                         })
-                ktour_url = f"http://api.visitkorea.or.kr/openapi/service/rest/KorService/searchKeyword?serviceKey={KTO_API_KEY}&keyword={destination}&numOfRows=20&pageNo=1&MobileOS=ETC&MobileApp=AppTest&_type=json"
-                ktour_response = requests.get(ktour_url)
-                ktour_places = ktour_response.json()
-                items = ktour_places.get("response", {}).get("body", {}).get("items", {}).get("item", [])
-                if isinstance(items, dict):
-                    items = [items]
-                for place in items:
-                    recommended_places.append({
-                        "name": place.get("title", ""),
-                        "address": place.get("addr1", ""),
-                        "description": place.get("contenttypeid", "설명 없음"),
-                        "lat": place.get("mapx", ""),
-                        "lng": place.get("mapy", ""),
-                    })
+                except requests.exceptions.RequestException as e:
+                    print(f"한국관광공사 API 요청 중 오류 발생: {e}")
+
             if search_lat is None or search_lng is None:
                 map_center = {"lat": 36.5, "lng": 127.5}
             else:
@@ -616,6 +687,36 @@ def plan_schedule_view(request):
                 "map_center": map_center,
             }
             return render(request, 'planner/plan_schedule.html', context)
+
+# OpenAI API
+openai.api_key = os.getenv("OPENAI_API_KEY")
+logger = logging.getLogger(__name__)
+
+@csrf_exempt
+def chatbot(request):
+    if request.method != "POST":
+        return HttpResponseNotAllowed(["POST"])
+
+    try:
+        data = json.loads(request.body)
+        user_message = data.get("message", "")
+
+        # 최신 OpenAI API 호출 (올바른 방식)
+        response = openai.ChatCompletion.create(  # 올바른 메서드 사용
+            model="gpt-4o-mini",  # 모델 이름
+            messages=[{"role": "user", "content": user_message}]  # 사용자 메시지 전달
+        )
+
+        bot_reply = response['choices'][0]['message']['content'].strip()  # 결과 추출
+        return JsonResponse({"reply": bot_reply})
+
+    except json.JSONDecodeError:
+        logger.error("JSON Decode Error: 요청 데이터가 올바르지 않습니다.")
+        return JsonResponse({"reply": "잘못된 JSON 데이터입니다."}, status=400)
+
+    except Exception as e:
+        logger.error(f"Chatbot Error: {e}")  # 서버 로그에 오류 기록
+        return JsonResponse({"reply": f"서버 오류 발생: {str(e)}"}, status=500)
 
 @csrf_exempt
 def save_schedule_view(request):
@@ -715,9 +816,8 @@ def update_destination_view(request):
     Google Places API (Text Search, Nearby Search)와 한국관광공사 API를 사용해
     추천 장소 데이터를 수집하고, 해당 지역의 지도 중심 좌표와 함께 JSON으로 반환합니다.
     """
-    destination = request.GET.get("destination", "").strip()
-
-    # 초기값 설정
+    # GET 요청 처리: 기존 코드 그대로 추천 장소 수집 등
+    destination = request.GET.get("destination", "")
     recommended_places = []
     search_lat, search_lng = None, None
 
@@ -738,27 +838,74 @@ def update_destination_view(request):
                     "lat": place["geometry"]["location"]["lat"],
                     "lng": place["geometry"]["location"]["lng"],
                 })
-
         # 2. Google Places API - Nearby Search
-        if search_lat and search_lng:
-            nearby_url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?location={search_lat},{search_lng}&radius=2000&language=ko&key={GOOGLE_MAPS_API_KEY}"
-            nearby_response = requests.get(nearby_url)
-            nearby_places = nearby_response.json()
-            for place in nearby_places.get("results", []):
-                recommended_places.append({
-                    "name": place["name"],
-                    "address": place.get("vicinity", ""),
-                    "description": place.get("types", []),
-                    "lat": place["geometry"]["location"]["lat"],
-                    "lng": place["geometry"]["location"]["lng"],
-                })
+        # if search_lat and search_lng:
+        #     nearby_url = f"https://maps.googleapis.com/maps/api/place/nearbysearch/json?location={search_lat},{search_lng}&radius=2000&language=ko&key={GOOGLE_MAPS_API_KEY}"
+        #     nearby_response = requests.get(nearby_url)
+        #     nearby_places = nearby_response.json()
+        #     for place in nearby_places.get("results", []):
+        #         recommended_places.append({
+        #             "name": place["name"],
+        #             "address": place.get("vicinity", ""),
+        #             "description": place.get("types", []),
+        #             "lat": place["geometry"]["location"]["lat"],
+        #             "lng": place["geometry"]["location"]["lng"],
+        #         })
+        # 3. 한국관광공사 API
+        api_url = "http://apis.data.go.kr/B551011/KorService1/searchKeyword1"
+        params = {
+            "serviceKey": KTO_API_KEY,
+            "keyword": destination,
+            "numOfRows": 100,
+            "pageNo": 1,
+            "MobileOS": "ETC",
+            "MobileApp": "AppTest",
+            "_type": "json"
+        }
+        try:
+            ktour_response = requests.get(api_url, params=params)
+            ktour_response.raise_for_status()  # HTTP 오류 시 예외 발생
+            ktour_places = ktour_response.json()
+            # 디버깅: 서버 콘솔에 API 응답 출력
+            print("KTO API 응답:", json.dumps(ktour_places, indent=2, ensure_ascii=False))
+            items = ktour_places.get("response", {}).get("body", {}).get("items", {}).get("item", [])
 
-    # 지도 중심 좌표 결정 (Google Places API에서 얻은 좌표가 없으면 기본값 사용)
+            # items가 딕셔너리인 경우 리스트로 변환
+            if isinstance(items, dict):
+                items = [items]
+
+            for place in items:
+                # 필터링: contentTypeId가 "12" 또는 "14"인 경우만 처리
+                ct = place.get("contenttypeid", "")
+                if ct not in ["12", "14"]:
+                    continue
+                firstimage2 = place.get("firstimage2")
+                if not firstimage2:
+                    continue
+
+                recommended_places.append({
+                    "name": place.get("title", ""),
+                    "address": place.get("addr1", ""),
+                    "description": ct,
+                    "firstimage2": place.get("firstimage2", "https://via.placeholder.com/200?text=No+Image"),
+                    "lat": place.get("mapy", ""),
+                    "lng": place.get("mapx", ""),
+                    "source": "kto"
+                })
+        except requests.exceptions.RequestException as e:
+            print(f"한국관광공사 API 요청 중 오류 발생: {e}")
+
     if search_lat is None or search_lng is None:
         map_center = {"lat": 36.5, "lng": 127.5}
     else:
         map_center = {"lat": search_lat, "lng": search_lng}
-
+    context = {
+        "destination": destination,
+        "recommended_places": recommended_places,
+        "recommended_json": json.dumps(recommended_places),
+        "google_map_api_key": GOOGLE_MAPS_API_KEY,
+        "map_center": map_center,
+    }
     return JsonResponse({
         "destination": destination,
         "map_center": map_center,
@@ -780,145 +927,197 @@ def schedule_delete_view(request, plan_no):
         return JsonResponse({"status": "error", "message": "일정을 찾을 수 없습니다."}, status=404)
 
 
-def board_list(request):
-    """
-    게시판 목록 페이지:
-    - 모든 게시글을 최신순으로 보여주고, 페이지네이션 처리합니다.
-    - 검색어가 있으면 제목 또는 내용을 기준으로 필터링합니다.
-    """
-    query = request.GET.get("q", "")
-    boards = Board.objects.all().order_by("-created_at")
-    if query:
-        boards = boards.filter(title__icontains=query) | boards.filter(content__icontains=query)
-    paginator = Paginator(boards, 3)  # 페이지당 3개 게시글
-    page_number = request.GET.get("page")
-    page_obj = paginator.get_page(page_number)
-    return render(request, "planner/board_list.html", {"page_obj": page_obj, "query": query})
+# 메인 피드 페이지: 로그인한 사용자의 피드를 인스타그램 피드처럼 보여줌
+def feed_main(request):
+    user_email = request.session.get('user_email')
+    if not user_email:
+        return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
 
+    feed_object_list = Feed.objects.all().order_by('-id')
+    feed_list = []
+    for feed in feed_object_list:
+        # feed.author는 Signup 인스턴스
+        user_feed = feed.author
+        reply_object_list = Reply.objects.filter(feed=feed)
+        reply_list = []
+        for reply in reply_object_list:
+            reply_author = reply.author
+            reply_list.append({
+                "reply_content": reply.reply_content,
+                "nickname": reply_author.name if reply_author else "",
+            })
+        like_count = Like.objects.filter(feed=feed, is_like=True).count()
+        is_liked = Like.objects.filter(feed=feed, author=user_email, is_like=True).exists()
+        is_marked = Bookmark.objects.filter(feed=feed, author=user_email, is_marked=True).exists()
+        feed_list.append({
+            "id": feed.id,
+            "image": feed.image.url if feed.image else "",
+            "content": feed.content,
+            "like_count": like_count,
+            "profile_image": "",  # 기본 프로필 이미지가 없는 경우
+            "nickname": user_feed.name if user_feed else "",
+            "reply_list": reply_list,
+            "is_liked": is_liked,
+            "is_marked": is_marked,
+        })
 
-def board_detail(request, board_id):
-    """
-    게시글 상세보기 페이지
-    """
-    board = Board.objects.get(id=board_id)
-    return render(request, "planner/board_detail.html", {"board": board})
+    return render(request, "planner/feed_main.html", context={"feeds": feed_list, "user": user_email})
 
+# 피드 업로드: POST 요청 시 이미지 파일과 글 내용을 저장
+def upload_feed(request):
+    if request.method == "POST":
+        file = request.FILES.get('file')
+        if not file:
+            return JsonResponse({"status": "error", "message": "파일이 없습니다."}, status=400)
+        uuid_name = uuid4().hex
+        save_path = os.path.join(settings.MEDIA_ROOT, 'feed_images', uuid_name)
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        with open(save_path, 'wb+') as destination:
+            for chunk in file.chunks():
+                destination.write(chunk)
+        content_text = request.POST.get('content', '')
+        email = request.session.get('user_email')
+        if not email:
+            return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
+        user = Signup.objects.filter(email=email).first()
+        if not user:
+            return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
+        Feed.objects.create(author=user, image='feed_images/' + uuid_name, content=content_text)
+        return JsonResponse({"status": "success"}, status=200)
+    return JsonResponse({"status": "error", "message": "POST 요청만 허용됩니다."}, status=405)
+
+# 댓글 업로드: POST 요청 시 댓글 저장
+def upload_reply(request):
+    if request.method == "POST":
+        feed_id = request.POST.get("feed_id")
+        reply_content = request.POST.get("reply_content")
+        email = request.session.get("user_email")
+        if not feed_id or not reply_content or not email:
+            return JsonResponse({"status": "error", "message": "필요한 데이터가 누락되었습니다."}, status=400)
+        user = Signup.objects.filter(email=email).first()
+        if not user:
+            return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
+        feed = Feed.objects.filter(id=feed_id).first()
+        if not feed:
+            return JsonResponse({"status": "error", "message": "피드를 찾을 수 없습니다."}, status=404)
+        Reply.objects.create(feed=feed, reply_content=reply_content, author=user)
+        return JsonResponse({"status": "success"}, status=200)
+    return JsonResponse({"status": "error", "message": "POST 요청만 허용됩니다."}, status=405)
+
+# 좋아요 토글 기능
+def toggle_like(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"status": "error", "message": "JSON 데이터 오류"}, status=400)
+        feed_id = data.get("feed_id")
+        favorite_text = data.get("favorite_text", "favorite_border")
+        is_like = True if favorite_text == "favorite_border" else False
+        email = request.session.get("user_email")
+        if not email:
+            return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
+        user = Signup.objects.filter(email=email).first()
+        if not user:
+            return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
+        like = Like.objects.filter(feed_id=feed_id, author=user).first()
+        if like:
+            like.is_like = is_like
+            like.save()
+        else:
+            Like.objects.create(feed_id=feed_id, is_like=is_like, author=user)
+        return JsonResponse({"status": "success"}, status=200)
+    return JsonResponse({"status": "error", "message": "POST 요청만 허용됩니다."}, status=405)
+
+# 북마크 토글 기능
+def toggle_bookmark(request):
+    if request.method == "POST":
+        try:
+            data = json.loads(request.body)
+        except json.JSONDecodeError:
+            return JsonResponse({"status": "error", "message": "JSON 데이터 오류"}, status=400)
+        feed_id = data.get("feed_id")
+        bookmark_text = data.get("bookmark_text", "bookmark_border")
+        is_marked = True if bookmark_text == "bookmark_border" else False
+        email = request.session.get("user_email")
+        if not email:
+            return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
+        user = Signup.objects.filter(email=email).first()
+        if not user:
+            return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
+        bookmark = Bookmark.objects.filter(feed_id=feed_id, author=user).first()
+        if bookmark:
+            bookmark.is_marked = is_marked
+            bookmark.save()
+        else:
+            Bookmark.objects.create(feed_id=feed_id, is_marked=is_marked, author=user)
+        return JsonResponse({"status": "success"}, status=200)
+    return JsonResponse({"status": "error", "message": "POST 요청만 허용됩니다."}, status=405)
 
 @csrf_exempt
-def board_create(request):
-    user_email = request.session.get("user_email")
+def comment_reply(request, parent_id):
     if request.method == "POST":
+        user_email = request.session.get("user_email")
         if not user_email:
             return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
         try:
-            author = Signup.objects.get(email=user_email)
+            user = Signup.objects.get(email=user_email)
         except Signup.DoesNotExist:
             return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
-        title = request.POST.get("title")
-        content = request.POST.get("content")
-        if not title or not content:
-            return JsonResponse({"status": "error", "message": "제목과 내용을 모두 입력해 주세요."}, status=400)
-        board = Board.objects.create(
-            title=title,
-            content=content,
-            author=author,
+        try:
+            parent_comment = Reply.objects.get(id=parent_id)
+        except Reply.DoesNotExist:
+            return JsonResponse({"status": "error", "message": "부모 댓글을 찾을 수 없습니다."}, status=404)
+        reply_content = request.POST.get("reply_content", "").strip()
+        if not reply_content:
+            return JsonResponse({"status": "error", "message": "답글 내용을 입력해 주세요."}, status=400)
+        new_reply = Reply.objects.create(
+            feed=parent_comment.feed,
+            author=user,
+            reply_content=reply_content,
+            parent=parent_comment
         )
-        return JsonResponse({"status": "success", "message": "게시글이 작성되었습니다.", "board_id": board.id})
-    else:
-        # GET 요청 시, 로그인하지 않은 경우 board_list 페이지로 리다이렉트하며 메시지 전달
-        if not user_email:
-            messages.error(request, "로그인이 필요합니다.")
-            return redirect('board_list')
-        # 로그인된 상태라면 작성 페이지 렌더링
-        return render(request, "planner/board_create.html")
-
-
-@csrf_exempt
-def board_update(request, board_id):
-    """
-    게시글 수정 기능
-    """
-    user_email = request.session.get("user_email")
-    if not user_email:
-        return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
-
-    board = Board.objects.get(id=board_id)
-    if board.author.email != user_email:
-        return JsonResponse({"status": "error", "message": "수정 권한이 없습니다."}, status=403)
-
-    if request.method == "POST":
-        title = request.POST.get("title")
-        content = request.POST.get("content")
-        if not title or not content:
-            return JsonResponse({"status": "error", "message": "제목과 내용을 모두 입력해 주세요."}, status=400)
-        board.title = title
-        board.content = content
-        board.save()
-        return JsonResponse({"status": "success", "message": "게시글이 수정되었습니다."})
-    else:
-        return render(request, "planner/board_update.html", {"board": board})
-
-
-@csrf_exempt
-def board_delete(request, board_id):
-    """
-    게시글 삭제 기능
-    """
-    user_email = request.session.get("user_email")
-    if not user_email:
-        return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
-
-    board = Board.objects.get(id=board_id)
-    if board.author.email != user_email:
-        return JsonResponse({"status": "error", "message": "삭제 권한이 없습니다."}, status=403)
-
-    if request.method == "POST":
-        board.delete()
-        return JsonResponse({"status": "success", "message": "게시글이 삭제되었습니다."})
-    else:
-        return render(request, "planner/board_delete.html", {"board": board})
-
-
-@csrf_exempt
-def comment_create(request, board_id):
-    """
-    댓글 작성 뷰:
-    - 로그인한 사용자가 게시글(board_id)에 댓글을 작성합니다.
-    - AJAX POST 요청으로 댓글 내용을 받아 저장합니다.
-    """
-    user_email = request.session.get("user_email")
-    if not user_email:
-        return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
-
-    try:
-        author = Signup.objects.get(email=user_email)
-    except Signup.DoesNotExist:
-        return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
-
-    try:
-        board = Board.objects.get(id=board_id)
-    except Board.DoesNotExist:
-        return JsonResponse({"status": "error", "message": "게시글을 찾을 수 없습니다."}, status=404)
-
-    if request.method == "POST":
-        content = request.POST.get("content")
-        if not content:
-            return JsonResponse({"status": "error", "message": "댓글 내용을 입력해 주세요."}, status=400)
-
-        comment = Comment.objects.create(
-            board=board,
-            author=author,
-            content=content
-        )
-
         return JsonResponse({
             "status": "success",
-            "message": "댓글이 작성되었습니다.",
+            "reply": {
+                "id": new_reply.id,
+                "author_name": new_reply.author.name,
+                "reply_content": new_reply.reply_content,
+                "created_at": new_reply.created_at.strftime("%Y-%m-%d %H:%M:%S")
+            }
+        })
+    else:
+        return JsonResponse({"status": "error", "message": "POST 요청만 허용됩니다."}, status=405)
+
+
+@csrf_exempt
+def comment_update(request, comment_id):
+    if request.method == "POST":
+        user_email = request.session.get("user_email")
+        if not user_email:
+            return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
+        try:
+            user = Signup.objects.get(email=user_email)
+        except Signup.DoesNotExist:
+            return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
+        try:
+            comment = Reply.objects.get(id=comment_id)
+        except Reply.DoesNotExist:
+            return JsonResponse({"status": "error", "message": "댓글을 찾을 수 없습니다."}, status=404)
+        if comment.author != user:
+            return JsonResponse({"status": "error", "message": "수정 권한이 없습니다."}, status=403)
+        new_content = request.POST.get("content", "").strip()
+        if not new_content:
+            return JsonResponse({"status": "error", "message": "수정할 내용을 입력해 주세요."}, status=400)
+        comment.reply_content = new_content
+        comment.save()
+        return JsonResponse({
+            "status": "success",
             "comment": {
                 "id": comment.id,
-                "author": comment.author.name,
-                "content": comment.content,
-                "created_at": comment.created_at.strftime("%Y-%m-%d %H:%M")
+                "author_name": comment.author.name,
+                "reply_content": comment.reply_content,
+                "created_at": comment.created_at.strftime("%Y-%m-%d %H:%M:%S")
             }
         })
     else:
@@ -927,65 +1126,27 @@ def comment_create(request, board_id):
 
 @csrf_exempt
 def comment_delete(request, comment_id):
-    """
-    댓글 삭제 뷰:
-    - 로그인한 사용자가 자신의 댓글(comment_id)을 삭제합니다.
-    """
-    user_email = request.session.get("user_email")
-    if not user_email:
-        return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
-
-    try:
-        comment = Comment.objects.get(id=comment_id)
-    except Comment.DoesNotExist:
-        return JsonResponse({"status": "error", "message": "댓글을 찾을 수 없습니다."}, status=404)
-
-    # 댓글 작성자 본인인지 확인
-    if comment.author.email != user_email:
-        return JsonResponse({"status": "error", "message": "삭제 권한이 없습니다."}, status=403)
-
     if request.method == "POST":
+        user_email = request.session.get("user_email")
+        if not user_email:
+            return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
+        try:
+            user = Signup.objects.get(email=user_email)
+        except Signup.DoesNotExist:
+            return JsonResponse({"status": "error", "message": "회원 정보를 찾을 수 없습니다."}, status=400)
+        try:
+            comment = Reply.objects.get(id=comment_id)
+        except Reply.DoesNotExist:
+            return JsonResponse({"status": "error", "message": "댓글을 찾을 수 없습니다."}, status=404)
+        if comment.author != user:
+            return JsonResponse({"status": "error", "message": "삭제 권한이 없습니다."}, status=403)
         comment.delete()
         return JsonResponse({"status": "success", "message": "댓글이 삭제되었습니다."})
     else:
         return JsonResponse({"status": "error", "message": "POST 요청만 허용됩니다."}, status=405)
 
-@csrf_exempt
-def comment_update(request, comment_id):
-    """
-    댓글 수정 뷰:
-    - 로그인한 사용자가 자신의 댓글(comment_id)을 수정합니다.
-    - POST 요청으로 수정할 댓글 내용을 받아 업데이트합니다.
-    """
-    user_email = request.session.get("user_email")
-    if not user_email:
-        return JsonResponse({"status": "error", "message": "로그인이 필요합니다."}, status=401)
-
-    try:
-        comment = Comment.objects.get(id=comment_id)
-    except Comment.DoesNotExist:
-        return JsonResponse({"status": "error", "message": "댓글을 찾을 수 없습니다."}, status=404)
-
-    # 댓글 작성자 확인
-    if comment.author.email != user_email:
-        return JsonResponse({"status": "error", "message": "수정 권한이 없습니다."}, status=403)
-
-    if request.method == "POST":
-        new_content = request.POST.get("content")
-        if not new_content:
-            return JsonResponse({"status": "error", "message": "수정할 내용을 입력해 주세요."}, status=400)
-        comment.content = new_content
-        comment.save()
-        return JsonResponse({
-            "status": "success",
-            "message": "댓글이 수정되었습니다.",
-            "comment": {
-                "id": comment.id,
-                "author": comment.author.name,
-                "content": comment.content,
-                "created_at": comment.created_at.strftime("%Y-%m-%d %H:%M")
-            }
-        })
-    else:
-        return JsonResponse({"status": "error", "message": "POST 요청만 허용됩니다."}, status=405)
-
+def feed_detail_modal(request, feed_id):
+    feed = get_object_or_404(Feed, id=feed_id)
+    # 피드 상세보기에서 모달에 표시할 부분만 렌더링합니다.
+    # 기존 feed_detail.html의 내용을 재활용하되, 모달에 적합하도록 불필요한 네비게이션 등은 제외합니다.
+    return render(request, "planner/feed_detail_modal.html", {"feed": feed})

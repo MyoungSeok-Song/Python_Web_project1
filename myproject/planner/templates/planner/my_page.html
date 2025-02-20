@@ -15,44 +15,50 @@
 <body>
   <!-- 헤더 (메인페이지 nav 영역 복사) -->
   <nav class="navbar navbar-expand-lg navbar-light bg-light">
-    <div class="container">
-      <!-- 브랜드(왼쪽) -->
-      <a class="navbar-brand" href="{% url 'main_page' %}">여행 플래너</a>
-      <!-- 토글 버튼 -->
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
-              data-bs-target="#navbarNav" aria-controls="navbarNav"
-              aria-expanded="false" aria-label="Toggle navigation">
-        <span class="navbar-toggler-icon"></span>
-      </button>
-      <!-- 메뉴 항목 -->
-      <div class="collapse navbar-collapse" id="navbarNav">
-        <ul class="navbar-nav ms-auto">
-          <li class="nav-item">
-            <a class="nav-link" href="#">이용방법</a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link" href="{% url 'board_list' %}">게시판</a>
-          </li>
-          {% if request.session.user_email %}
-            <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
-                 data-bs-toggle="dropdown" aria-expanded="false">
-                {{ request.session.user_name }}님
-              </a>
-              <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
-                <li><a class="dropdown-item" href="{% url 'my_page' %}">마이페이지</a></li>
-                <li><a class="dropdown-item" href="{% url 'logout' %}">로그아웃</a></li>
-              </ul>
-            </li>
-          {% else %}
+      <div class="container">
+        <!-- 브랜드(왼쪽) -->
+        <a class="navbar-brand" href="{% url 'main_page' %}">여행 플래너</a>
+
+        <!-- 토글 버튼(화면이 작아지면 나타남) -->
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+                data-bs-target="#navbarNav" aria-controls="navbarNav"
+                aria-expanded="false" aria-label="Toggle navigation">
+          <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <!-- 실제 메뉴 (오른쪽) -->
+        <div class="collapse navbar-collapse" id="navbarNav">
+          <ul class="navbar-nav ms-auto">
             <li class="nav-item">
-              <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#loginModal">로그인</a>
+              <a class="nav-link" href="#">이용방법</a>
             </li>
-          {% endif %}
-        </ul>
-      </div>
-    </div>
-  </nav>
+            <li class="nav-item">
+              {% if request.session.user_email %}
+                <a class="nav-link" href="{% url 'feed_main' %}">커뮤니티</a>
+              {% else %}
+                <a class="nav-link" href="#" onclick="alert('로그인 후 이용해 주세요.'); return false;">커뮤니티</a>
+              {% endif %}
+            </li>
+            {% if request.session.user_email %}
+              <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button"
+                   data-bs-toggle="dropdown" aria-expanded="false">
+                  {{ request.session.user_name }}님
+                </a>
+                <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                  <li><a class="dropdown-item" href="{% url 'my_page' %}">마이페이지</a></li>
+                  <li><a class="dropdown-item" href="{% url 'logout' %}">로그아웃</a></li>
+                </ul>
+              </li>
+            {% else %}
+              <li class="nav-item">
+                <a class="nav-link" href="#" data-bs-toggle="modal" data-bs-target="#loginModal">로그인</a>
+              </li>
+            {% endif %}
+          </ul>
+        </div>
+      </div> <!-- /.container -->
+    </nav>
 
   <!-- 마이페이지 콘텐츠 영역 (고정폭/고정높이 레이아웃) -->
   <div class="container-fluid mt-5">

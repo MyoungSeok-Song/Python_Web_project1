@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.contrib.auth.hashers import make_password
-from .models import Signup, Planner, Tourlist, PlannerDetail, Board
+from .models import Signup, Planner, Tourlist, PlannerDetail
 
 # Signup 모델 관리자 등록 예시
 class SignupAdmin(admin.ModelAdmin):
@@ -23,4 +23,4 @@ admin.site.register(Signup, SignupAdmin)
 admin.site.register(Planner)
 admin.site.register(Tourlist)
 admin.site.register(PlannerDetail)
-admin.site.register(Board)
+

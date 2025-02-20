@@ -72,7 +72,11 @@
             <a class="nav-link" href="#">이용방법</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="{% url 'board_list' %}">게시판</a>
+            {% if request.session.user_email %}
+              <a class="nav-link" href="{% url 'feed_main' %}">커뮤니티</a>
+            {% else %}
+              <a class="nav-link" href="#" onclick="alert('로그인 후 이용해 주세요.'); return false;">커뮤니티</a>
+            {% endif %}
           </li>
           {% if request.session.user_email %}
             <li class="nav-item dropdown">

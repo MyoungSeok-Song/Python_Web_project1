@@ -42,19 +42,28 @@
 <!-- 헤더 (메인 페이지와 동일) -->
   <nav class="navbar navbar-expand-lg navbar-light bg-light">
     <div class="container">
+      <!-- 브랜드(왼쪽) -->
       <a class="navbar-brand" href="{% url 'main_page' %}">여행 플래너</a>
+
+      <!-- 토글 버튼(화면이 작아지면 나타남) -->
       <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
               data-bs-target="#navbarNav" aria-controls="navbarNav"
               aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
+
+      <!-- 실제 메뉴 (오른쪽) -->
       <div class="collapse navbar-collapse" id="navbarNav">
         <ul class="navbar-nav ms-auto">
           <li class="nav-item">
             <a class="nav-link" href="#">이용방법</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" href="{% url 'board_list' %}">게시판</a>
+            {% if request.session.user_email %}
+              <a class="nav-link" href="{% url 'feed_main' %}">커뮤니티</a>
+            {% else %}
+              <a class="nav-link" href="#" onclick="alert('로그인 후 이용해 주세요.'); return false;">커뮤니티</a>
+            {% endif %}
           </li>
           {% if request.session.user_email %}
             <li class="nav-item dropdown">
@@ -74,7 +83,7 @@
           {% endif %}
         </ul>
       </div>
-    </div>
+    </div> <!-- /.container -->
   </nav>
 
   <div class="container">
